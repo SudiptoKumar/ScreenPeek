@@ -23,15 +23,15 @@ const enc = encodeURIComponent;
     <h3>Pages</h3>
     {results.pages.length === 0 ? <p>No pages matched.</p> : <ul>{results.pages.map(row => <li><a href={`/admin/pages/?edit=${enc(row.slug)}`}>{row.title || row.slug}</a> · /{row.slug}/</li>)}</ul>}
     <h3>Redirects</h3>
-    {results.redirects.length === 0 ? <p>No redirects matched.</p> : <ul>{results.redirects.map(row => <li><a href={`/admin/seo/?q=${enc(row.from_path)}`}>{row.from_path}</a> → {row.to_target} · {row.type}</li>)}</ul>}
+    {results.redirects.length === 0 ? <p>No redirects matched.</p> : <ul>{results.redirects.map(row => <li><a href={`/admin/seo/?q=${enc(row.from_path)}`}>{row.from_path}</a> <svg class="link-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg> {row.to_target} · {row.type}</li>)}</ul>}
   </>}
   {results && results.query.length === 1 && <p>Type at least 2 characters to search.</p>}
 </section>
 <section class="catalogue-section"><h2>Preview as visitor</h2>
   <p>{preview ? `Preview mode is ON in this browser: you are browsing the public site as a visitor from ${preview} (${countryNames[preview] || preview}). Public pages show a preview banner while it is on.` : 'Preview mode is off. Pick a country to browse the public site exactly as a visitor from that country sees it, including their streaming providers.'}</p>
-  <nav class="hub-navigation" aria-label="Preview country">{['US', 'GB', 'CA', 'AU'].map(country => <a href={`/admin/tools/?preview=${country}`} aria-current={preview === country ? 'true' : undefined}>{country}{preview === country ? ' ✓' : ''}</a>)}<a href="/admin/tools/?preview=off">Turn off</a></nav>
+  <nav class="hub-navigation" aria-label="Preview country">{['US', 'GB', 'CA', 'AU'].map(country => <a href={`/admin/tools/?preview=${country}`} aria-current={preview === country ? 'true' : undefined}>{country}{preview === country && <svg class="set-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>}</a>)}<a href="/admin/tools/?preview=off">Turn off</a></nav>
   <nav class="hub-navigation" aria-label="Preview device width"><a href="/admin/tools/?frame=360" aria-current={frame === '360' ? 'true' : undefined}>Phone frame (360px)</a><a href="/admin/tools/?frame=full" aria-current={frame === 'full' ? 'true' : undefined}>Full width</a></nav>
-  <iframe src="/" title="Public site preview" loading="lazy" style={`width:${frame === 'full' ? '100%' : '360px'};height:640px;border:1px solid #8884;max-width:100%`}></iframe>
+  <div class="admin-preview-scroll"><iframe src="/" title="Public site preview" loading="lazy" style={`width:${frame === 'full' ? '100%' : '360px'};height:640px;border:1px solid #8884;max-width:100%`}></iframe></div>
 </section>
 <section class="catalogue-section"><h2>Run a job</h2>
   <p>Jobs run in GitHub Actions. The repository enable switches still decide whether a dispatched job actually executes, and the run link appears here after dispatch.</p>
