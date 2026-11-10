@@ -143,6 +143,10 @@ def send_alert(rich_html, fallback_html):
 # ---------- live widget cards (pinned dashboards, updated in place) ----------
 WIDGET_FILES = [("money_widget2_msg", "emerald_vault.html"),
                 ("money_widget3_msg", "solar_pulse.html")]
+# Bump whenever the widget HTML designs change: on the next run the checker
+# sends FRESH widget messages with the new designs and takes over their IDs
+# (a sent widget's HTML itself can never be edited in place).
+WIDGET_VERSION = "v3-2026-11-11"
 
 
 def bot_call(method, payload):
@@ -196,10 +200,11 @@ def sync_widgets(d1, data_str):
     if not (os.environ.get("MONEY_BOT_TOKEN") and os.environ.get("MONEY_BOT_CHAT_ID")):
         return False
     last = get_config(d1, "money_widget_data")
+    stale = get_config(d1, "money_widget_version") != WIDGET_VERSION
     base = os.path.join(os.path.dirname(os.path.abspath(__file__)), "widgets")
     for key, fname in WIDGET_FILES:
         msg_id = get_config(d1, key)
-        if not msg_id:
+        if not msg_id or stale:
             try:
                 with open(os.path.join(base, fname), encoding="utf-8") as fh:
                     html = fh.read()
@@ -218,6 +223,9 @@ def sync_widgets(d1, data_str):
                            {"message_id": int(msg_id), "chat_data": data_str})
             if out and not out.get("ok") and "not modified" not in str(out.get("description", "")).lower():
                 print("widget edit failed:", fname, out.get("description"))
+    if stale and all(get_config(d1, key) for key, _ in WIDGET_FILES):
+        set_config(d1, "money_widget_version", WIDGET_VERSION)
+        print("widget design version now", WIDGET_VERSION)
     if data_str != last:
         set_config(d1, "money_widget_data", data_str)
     return True

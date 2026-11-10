@@ -27,10 +27,8 @@
   <section class="box">
     <div class="boxhead"><span>PAYOUT GOAL</span><span id="payPct">0%</span></div>
     <div class="meter"><div class="fill" id="payFill"></div></div>
-    <div class="footrow"><span id="payLabel">$0.00 / $100.00</span><span>ALL-TIME <b id="earned">$0.00</b></span></div>
-    <div class="footrow" style="margin-top:9px"><span>Next milestone <b id="mile">$10.00</b></span><b id="milePct">0%</b></div>
-    <div class="meter"><div class="fill" id="mileFill"></div></div>
-    <div class="footrow"><span>Current balance</span><b id="balance">$0.00</b></div>
+    <div class="footrow"><span id="payLabel">$0.00 / $100.00</span><span>TARGET</span></div>
+    <div class="footrow" style="margin-top:7px"><span>Current balance</span><b id="balance">$0.00</b></div>
   </section>
   <div class="controls"><button class="btn" id="refresh">↻ Refresh now</button><span class="status" id="status">DATA SYNCED</span></div>
 </div>
@@ -40,8 +38,8 @@
   const $ = id => document.getElementById(id);
   const defaults = {
     revenue:0, impressions:0, clicks:0, ctr:0, cpm:0,
-    month_revenue:0, month_impressions:0, earned:0, balance:0,
-    milestone:10, payout_target:100, trend:[0,0,0,0,0,0,0],
+    month_revenue:0, month_impressions:0, balance:0,
+    payout_target:100, trend:[0,0,0,0,0,0,0],
     updated:"Waiting for first sync"
   };
   const money = n => "$" + Number(n || 0).toFixed(2);
@@ -60,10 +58,8 @@
     const impressions = Number(d.impressions || 0);
     const ctr = d.ctr == null ? (impressions ? clicks / impressions * 100 : 0) : Number(d.ctr);
     const target = Math.max(0.01, Number(d.payout_target || 100));
-    const milestone = Math.max(0.01, Number(d.milestone || 10));
     const balance = Math.max(0, Number(d.balance || 0));
     const payout = Math.min(100, balance / target * 100);
-    const milestoneProgress = Math.min(100, balance / milestone * 100);
 
     put("rev", money(d.revenue));
     put("imp", integer(impressions));
@@ -72,12 +68,8 @@
     put("cpm", money(d.cpm));
     put("monthRev", money(d.month_revenue));
     put("monthImp", integer(d.month_impressions));
-    put("earned", money(d.earned));
     put("balance", money(balance));
-    put("mile", money(milestone));
-    put("milePct", milestoneProgress.toFixed(0) + "%");
     if($("payFill")) $("payFill").style.width = payout + "%";
-    if($("mileFill")) $("mileFill").style.width = milestoneProgress + "%";
     put("payPct", payout.toFixed(1) + "%");
     put("payLabel", money(balance) + " / " + money(target));
     put("updated", String(d.updated || "Waiting for first sync"));

@@ -1,19 +1,19 @@
 <style>
-*{box-sizing:border-box}body{margin:0;padding:12px;color:var(--tg-theme-text-color);font:14px/1.35 system-ui,sans-serif;color-scheme:light dark}.shell{display:flex;flex-direction:column;gap:10px}
+*{box-sizing:border-box}body{margin:0;padding:12px;color:var(--tg-theme-text-color);font:14px/1.35 system-ui,sans-serif;color-scheme:light dark}.shell{display:flex;flex-direction:column;gap:8px}
 .head{display:flex;justify-content:space-between;align-items:center}.brand{font-size:12px;font-weight:850;letter-spacing:2px}.hint{font-size:10px;color:var(--tg-theme-hint-color)}.seal{width:30px;height:30px;border-radius:10px;display:grid;place-items:center;color:#f5d78b;background:#173d32;border:1px solid #4a7d62}
-.vault{padding:15px;border-radius:17px;background:linear-gradient(145deg,#0d3027,#174d3d 58%,#183d35);color:#f4f5e9;position:relative;overflow:hidden;animation:rise .6s ease both}.vault:after{content:"";position:absolute;width:130px;height:130px;border:1px solid #d5bd7850;border-radius:50%;right:-45px;top:-48px;box-shadow:0 0 0 13px #d5bd7810,0 0 0 27px #d5bd7809}
-.gold{color:#f2d38b}.eyebrow{font-size:10px;letter-spacing:1.4px;color:#c1d7c8}.amount{font-size:33px;font-weight:800;letter-spacing:-1.2px;margin:4px 0}.meta{font-size:10px;color:#bfd0c4}.split{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}.split div{padding-top:9px;border-top:1px solid #ffffff25}.split b{display:block;font-size:17px;margin-top:3px}
-.stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.stat{padding:11px;border-radius:12px;background:var(--tg-theme-secondary-bg-color);border:1px solid var(--tg-theme-section-separator-color)}.label{font-size:10px;color:var(--tg-theme-hint-color);letter-spacing:.7px}.num{font-size:19px;font-weight:750;margin-top:3px;font-variant-numeric:tabular-nums}
-.card{padding:12px;border:1px solid var(--tg-theme-section-separator-color);border-radius:13px;background:var(--tg-theme-secondary-bg-color)}.line{height:8px;border-radius:8px;background:var(--tg-theme-section-separator-color);overflow:hidden;margin:8px 0}.fill{height:100%;width:0;background:linear-gradient(90deg,#b68b42,#f2d38b);transition:width .7s ease}.between{display:flex;justify-content:space-between;align-items:center;gap:8px}.tiny{font-size:10px;color:var(--tg-theme-hint-color)}.bars{height:30px;display:flex;align-items:end;gap:5px;margin-top:8px}.bars i{flex:1;min-width:7px;border-radius:4px 4px 1px 1px;background:linear-gradient(#e7cb83,#8f713b);height:8%;transition:height .5s ease}
+.vault{padding:12px 15px;border-radius:17px;background:linear-gradient(145deg,#0d3027,#174d3d 58%,#183d35);color:#f4f5e9;position:relative;overflow:hidden;animation:rise .6s ease both}.vault:after{content:"";position:absolute;width:130px;height:130px;border:1px solid #d5bd7850;border-radius:50%;right:-45px;top:-48px;box-shadow:0 0 0 13px #d5bd7810,0 0 0 27px #d5bd7809}
+.gold{color:#f2d38b}.eyebrow{font-size:10px;letter-spacing:1.4px;color:#c1d7c8}.amount{font-size:33px;font-weight:800;letter-spacing:-1.2px;margin:2px 0}.meta{font-size:10px;color:#bfd0c4}.hrow{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:0 10px}.today{margin-left:auto;text-align:right;padding-bottom:6px;position:relative;z-index:1}.today b{display:block;font-size:17px;margin-top:2px}
+.stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.stat{padding:7px 11px;border-radius:12px;background:var(--tg-theme-secondary-bg-color);border:1px solid var(--tg-theme-section-separator-color)}.label{font-size:10px;color:var(--tg-theme-hint-color);letter-spacing:.7px}.num{font-size:18px;font-weight:750;margin-top:1px;font-variant-numeric:tabular-nums}
+.card{padding:9px 12px;border:1px solid var(--tg-theme-section-separator-color);border-radius:13px;background:var(--tg-theme-secondary-bg-color)}.line{height:8px;border-radius:8px;background:var(--tg-theme-section-separator-color);overflow:hidden;margin:7px 0 5px}.fill{height:100%;width:0;background:linear-gradient(90deg,#b68b42,#f2d38b);transition:width .7s ease}.between{display:flex;justify-content:space-between;align-items:center;gap:8px}.tiny{font-size:10px;color:var(--tg-theme-hint-color)}.bars{height:24px;display:flex;align-items:end;gap:5px;margin-top:7px}.bars i{flex:1;min-width:7px;border-radius:4px 4px 1px 1px;background:linear-gradient(#e7cb83,#8f713b);height:8%;transition:height .5s ease}
 .actions{display:flex;align-items:center;justify-content:space-between}.btn{border:1px solid #b68b42;border-radius:10px;background:#173d32;color:#f4dfaa;padding:9px 13px;font-weight:750;font-size:12px}.status{font-size:9px;color:var(--tg-theme-hint-color)}
 @keyframes rise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:translateY(0)}}@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}}
 </style>
 <div class="shell">
   <div class="head"><div><div class="brand">SCREENPEEK <span class="gold">/ VAULT</span></div><div class="hint">FINANCIAL POSITION</div></div><div class="seal">◆</div></div>
   <section class="vault">
-    <div class="eyebrow">ESTIMATED BALANCE</div><div class="amount" id="balance">$0.00</div>
+    <div class="eyebrow">ESTIMATED BALANCE</div>
+    <div class="hrow"><div class="amount" id="balance">$0.00</div><div class="today"><span class="meta">TODAY'S REVENUE</span><b class="gold" id="rev">$0.00</b></div></div>
     <div class="meta">Updated <span id="updated">Waiting for first sync</span></div>
-    <div class="split"><div><span class="meta">EARNED ALL TIME</span><b class="gold" id="earned">$0.00</b></div><div><span class="meta">TODAY'S REVENUE</span><b id="rev">$0.00</b></div></div>
   </section>
   <div class="stats">
     <div class="stat"><div class="label">IMPRESSIONS</div><div class="num" id="imp">0</div></div>
@@ -23,15 +23,13 @@
   </div>
   <section class="card">
     <div class="between"><b style="font-size:11px;letter-spacing:1px">MONTHLY PERFORMANCE</b><b id="monthRev">$0.00</b></div>
-    <div class="between tiny" style="margin-top:6px"><span>Impressions</span><b id="monthImp">0</b></div>
+    <div class="between tiny" style="margin-top:5px"><span>Impressions</span><b id="monthImp">0</b></div>
     <div class="bars"><i data-bar></i><i data-bar></i><i data-bar></i><i data-bar></i><i data-bar></i><i data-bar></i><i data-bar></i></div>
   </section>
   <section class="card">
     <div class="between"><b style="font-size:11px;letter-spacing:1px">PAYOUT RESERVE</b><b id="payPct">0%</b></div>
     <div class="line"><div class="fill" id="payFill"></div></div>
     <div class="between tiny"><span id="payLabel">$0.00 / $100.00</span><span>TARGET</span></div>
-    <div class="between tiny" style="margin-top:9px"><span>Next milestone · <b id="mile">$10.00</b></span><b id="milePct">0%</b></div>
-    <div class="line"><div class="fill" id="mileFill"></div></div>
   </section>
   <div class="actions"><button class="btn" id="refresh">↻ Update vault</button><span class="status" id="status">DATA SYNCED</span></div>
 </div>
@@ -41,8 +39,8 @@
   const $ = id => document.getElementById(id);
   const defaults = {
     revenue:0, impressions:0, clicks:0, ctr:0, cpm:0,
-    month_revenue:0, month_impressions:0, earned:0, balance:0,
-    milestone:10, payout_target:100, trend:[0,0,0,0,0,0,0],
+    month_revenue:0, month_impressions:0, balance:0,
+    payout_target:100, trend:[0,0,0,0,0,0,0],
     updated:"Waiting for first sync"
   };
   const money = n => "$" + Number(n || 0).toFixed(2);
@@ -61,10 +59,8 @@
     const impressions = Number(d.impressions || 0);
     const ctr = d.ctr == null ? (impressions ? clicks / impressions * 100 : 0) : Number(d.ctr);
     const target = Math.max(0.01, Number(d.payout_target || 100));
-    const milestone = Math.max(0.01, Number(d.milestone || 10));
     const balance = Math.max(0, Number(d.balance || 0));
     const payout = Math.min(100, balance / target * 100);
-    const milestoneProgress = Math.min(100, balance / milestone * 100);
 
     put("rev", money(d.revenue));
     put("imp", integer(impressions));
@@ -73,12 +69,8 @@
     put("cpm", money(d.cpm));
     put("monthRev", money(d.month_revenue));
     put("monthImp", integer(d.month_impressions));
-    put("earned", money(d.earned));
     put("balance", money(balance));
-    put("mile", money(milestone));
-    put("milePct", milestoneProgress.toFixed(0) + "%");
     if($("payFill")) $("payFill").style.width = payout + "%";
-    if($("mileFill")) $("mileFill").style.width = milestoneProgress + "%";
     put("payPct", payout.toFixed(1) + "%");
     put("payLabel", money(balance) + " / " + money(target));
     put("updated", String(d.updated || "Waiting for first sync"));
