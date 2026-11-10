@@ -533,3 +533,13 @@ html { scroll-padding-bottom: 116px; }
   .admin-main { padding-bottom: calc(124px + env(safe-area-inset-bottom)); }
   .admin-footer { padding-bottom: calc(124px + env(safe-area-inset-bottom)); }
 }
+
+/* ================= v3.1 — phone nav cleanup (2026-11-11) =================
+   On phones the module pill nav is gone entirely: the bottom tab bar and
+   its More sheet carry every module link (Karn's call). Wider screens
+   keep the pill nav. Anchor offset shrinks to match (header only). */
+@media (max-width: 860px) {
+  .admin-shell .admin-nav { display: none; }
+  html { scroll-padding-top: 76px; }
+  .admin-shell section, .admin-shell .admin-slot { scroll-margin-top: 76px; }
+}

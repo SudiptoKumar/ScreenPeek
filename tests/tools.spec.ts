@@ -29,7 +29,11 @@ test('admin tools: global search, TTL settings, preview-as-visitor, run-any-job 
     await expect(page.getByRole('heading', { name: 'Preview as visitor' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Run a job' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Purge cache' })).toBeVisible();
+    // Phone width: the module pill nav is hidden by design (v3.1) — module
+    // links live in the bottom tab bar's More sheet instead.
+    await page.getByRole('button', { name: 'More' }).click();
     await expect(page.getByRole('link', { name: 'Tools' })).toBeVisible();
+    await page.getByRole('button', { name: 'Close' }).click();
 
     await page.getByLabel(/Search titles, people, links, pages and redirects/).fill('Tools Link');
     await page.getByRole('button', { name: 'Search' }).click();
