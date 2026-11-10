@@ -7,7 +7,7 @@ interface Props { module: AdminModule; actor: AdminIdentity; }
 const { module, actor } = Astro.props;
 const data = await advancedData(env, actor, module, Astro.url);
 const write = permitted(actor, module, true);
-const repository = /^[\w.-]+\/[\w.-]+$/.test(env.GITHUB_REPO || '') ? env.GITHUB_REPO : 'parkerlovealex/ScreenPeek';
+const repository = /^[\w.-]+\/[\w.-]+$/.test(env.GITHUB_REPO || '') ? env.GITHUB_REPO : 'SudiptoKumar/ScreenPeek';
 ---
 {module === 'dashboard' && <section class="catalogue-section"><h2>Delivery and free limits</h2>{actor.role === 'owner' && <form method="post"><input type="hidden" name="action" value="retry-delivery" /><button>Retry pending propagation and purge</button></form>}<p>Worker requests today: unavailable / 100,000 free daily allowance. D1 rows read today: unavailable / 5,000,000. Live analytics are not configured; no measured usage is implied.</p><a href="https://dash.cloudflare.com/">Open Cloudflare usage</a><p><a href="https://search.google.com/search-console">Search Console</a> · <a href={`https://github.com/${repository}/actions/workflows/ci.yml`}>Latest CI speed and Lighthouse reports</a></p></section>}
 {module === 'seo' && <>

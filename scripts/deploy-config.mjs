@@ -47,7 +47,7 @@ export function productionConfig(input, env) {
   db.database_id = id; namespace.id = kv; delete namespace.preview_id; posters.bucket_name = bucket;
   config.assets.run_worker_first = false;
   config.vars = { ...config.vars, SITE_URL: site, R2_PUBLIC_BASE: images, DEPLOYMENT_ENV: 'production', ADS_ENABLED: env.ADS_ENABLED || '0',
-    SITE_NAME: env.SITE_NAME || config.vars?.SITE_NAME || 'ScreenPeek', GITHUB_REPO: env.GITHUB_REPO || 'parkerlovealex/ScreenPeek' };
+    SITE_NAME: env.SITE_NAME || config.vars?.SITE_NAME || 'ScreenPeek', GITHUB_REPO: env.GITHUB_REPO || 'SudiptoKumar/ScreenPeek' };
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(config.vars.GITHUB_REPO)) throw new Error('GITHUB_REPO must be owner/repository.');
   return config;
 }
