@@ -376,3 +376,160 @@ html { scroll-padding-top: 140px; }
     animation: none !important; transition: none !important;
   }
 }
+
+/* ================= v3 — widget wall home (2026-11-11) =================
+   Home becomes a glanceable wall of colourful number widgets: health is
+   one compact strip up front (full report anchored below), the wordy
+   blocks become visuals, and every widget has its own format/colour. */
+
+/* --- health summary strip --- */
+.admin-shell .health-strip {
+  display: flex; align-items: center; gap: 14px;
+  margin: 18px 0 4px; padding: 14px 16px; border-radius: 18px;
+  background: linear-gradient(120deg, #b91c1c, #ea580c);
+  color: #fff; text-decoration: none;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, .3);
+}
+.admin-shell .health-strip-count {
+  font-size: 32px; font-weight: 800; line-height: 1; letter-spacing: -.01em;
+  background: rgba(255, 255, 255, .18); border-radius: 14px; padding: 9px 13px; flex: 0 0 auto;
+}
+.admin-shell .health-strip-text { flex: 1 1 auto; min-width: 0; display: grid; gap: 2px; }
+.admin-shell .health-strip-text strong { font-size: 16.5px; line-height: 1.25; }
+.admin-shell .health-strip-text small {
+  color: rgba(255, 255, 255, .85); font-size: 12.5px; line-height: 1.4;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.admin-shell .health-strip-view {
+  display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto;
+  font-weight: 700; font-size: 14px; background: rgba(255, 255, 255, .16);
+  padding: 9px 13px; border-radius: 999px;
+}
+.admin-shell .health-ok-front { margin: 18px 0 4px; }
+.admin-shell #not-working { scroll-margin-top: 140px; }
+
+/* --- wall frame --- */
+.admin-shell .wall-heading { font-size: 19px; margin: 22px 0 2px; }
+.admin-shell .wall-note { color: var(--muted); font-size: 14.5px; line-height: 1.55; margin: 6px 0 0; }
+.admin-shell .widget-wall { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 12px 0 6px; }
+.admin-shell .widget-wall .widget { margin: 0; }
+.admin-shell .widget-wall .widget h2 { color: rgba(255, 255, 255, .72); }
+.admin-shell .widget-wall .widget small { color: rgba(255, 255, 255, .66); }
+.admin-shell .widget-wall .widget-icon { color: rgba(255, 255, 255, .85); }
+.admin-shell .wall-fineprint { font-size: 12px; color: var(--muted); line-height: 1.55; margin: 8px 0 0; }
+
+/* balance hero — deep emerald → teal */
+.admin-shell .w-balance {
+  grid-column: 1 / -1;
+  background: linear-gradient(135deg, #065f46, #0f766e 55%, #155e75);
+  border-color: rgba(52, 211, 153, .35);
+}
+.admin-shell .w-balance .revenue-hero-figure { color: #fff; font-size: 44px; margin-bottom: 6px; }
+.admin-shell .w-balance small { max-width: 46ch; }
+
+/* payout ring — gold on dark violet */
+.admin-shell .w-ring {
+  background: linear-gradient(160deg, #2e1065, #171321);
+  border-color: rgba(167, 139, 250, .3);
+}
+.admin-shell .w-ring .ring-prog { stroke: #f5b14c; }
+.admin-shell .w-ring .ring-track { stroke: rgba(255, 255, 255, .14); }
+.admin-shell .w-ring .ring-centre strong { color: #fff; }
+
+/* today — violet → blue */
+.admin-shell .w-today {
+  background: linear-gradient(150deg, #4c1d95, #1d4ed8);
+  border-color: rgba(129, 140, 248, .35);
+}
+/* this month — deep blue */
+.admin-shell .w-month {
+  background: linear-gradient(150deg, #1e3a8a, #132036);
+  border-color: rgba(96, 165, 250, .3);
+}
+/* earned all time — steel slate */
+.admin-shell .w-alltime {
+  background: linear-gradient(150deg, #334155, #14161c);
+  border-color: rgba(148, 163, 184, .3);
+}
+/* yesterday — quiet plain panel (its neighbours carry the colour) */
+.admin-shell .w-yesterday { background: var(--panel); }
+.admin-shell .widget-wall .w-yesterday h2 { color: var(--muted); }
+.admin-shell .widget-wall .w-yesterday small { color: var(--muted); }
+.admin-shell .widget-wall .w-yesterday .widget-icon { color: var(--accent); }
+
+/* last-7-days trend as its own widget */
+.admin-shell .w-trend {
+  grid-column: 1 / -1;
+  background: linear-gradient(160deg, #0c2436, #101018);
+  border-color: rgba(56, 189, 248, .25);
+}
+.admin-shell .w-trend .revenue-trend { margin-top: 10px; }
+.admin-shell .w-trend .revenue-bar .bar-fill { background: linear-gradient(180deg, #38bdf8, #6366f1); max-width: 44px; }
+.admin-shell .w-trend .revenue-bar small { color: rgba(255, 255, 255, .6); font-weight: 700; }
+
+/* formats — labelled horizontal bars */
+.admin-shell .w-formats {
+  grid-column: 1 / -1;
+  background: linear-gradient(160deg, #1c1626, #101018);
+  border-color: rgba(192, 132, 252, .22);
+}
+.admin-shell .format-rows { display: grid; gap: 12px; margin-top: 4px; }
+.admin-shell .format-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 10px; align-items: baseline; }
+.admin-shell .format-name { font-size: 14px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+.admin-shell .format-fig { font-size: 12.5px; color: rgba(255, 255, 255, .66); white-space: nowrap; }
+.admin-shell .format-track { grid-column: 1 / -1; height: 8px; border-radius: 99px; background: rgba(255, 255, 255, .1); overflow: hidden; }
+.admin-shell .format-fill { display: block; height: 100%; border-radius: 99px; }
+
+/* library mini tiles — warm amber panel */
+.admin-shell .w-library {
+  grid-column: 1 / -1;
+  background: linear-gradient(150deg, #3b2f16, #171408);
+  border-color: rgba(245, 177, 76, .3);
+}
+.admin-shell .mini-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 2px 0 8px; }
+.admin-shell .mini-tile {
+  background: rgba(255, 255, 255, .07); border: 1px solid rgba(255, 255, 255, .09);
+  border-radius: 14px; padding: 10px 14px; display: grid; gap: 1px; min-width: 0;
+}
+.admin-shell .mini-tile strong { font-size: 26px; font-weight: 800; color: #fff; line-height: 1.1; }
+.admin-shell .mini-tile span {
+  font-size: 12px; color: rgba(255, 255, 255, .66);
+  text-transform: uppercase; letter-spacing: .07em; font-weight: 700;
+}
+
+/* status tiles row */
+.admin-shell .status-row { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.admin-shell .w-status { padding: 13px 14px; border-radius: 18px; }
+.admin-shell .w-status h2 { font-size: 10.5px; }
+.admin-shell .w-status .admin-big { font-size: 23px !important; }
+.admin-shell .w-status p { font-size: 13.5px; }
+.admin-shell .w-status a { color: var(--accent); font-weight: 600; font-size: 12.5px; }
+.admin-shell .sync-status { display: flex; align-items: center; gap: 7px; font-weight: 700; text-transform: capitalize; }
+.admin-shell .sync-dot { width: 10px; height: 10px; border-radius: 50%; background: #9a9aa5; flex: 0 0 auto; }
+.admin-shell .sync-dot.sync-ok { background: #4ade80; }
+.admin-shell .sync-dot.sync-run { background: #38bdf8; }
+.admin-shell .sync-dot.sync-bad { background: #f87171; }
+@media (max-width: 380px) {
+  .admin-shell .status-row { gap: 8px; }
+  .admin-shell .w-status { padding: 11px 10px; }
+}
+
+/* entrance stagger across the wall (transform/opacity only) */
+.admin-shell .widget-wall > *, .admin-shell .status-row > section { animation: widget-in .5s ease-out both; }
+.admin-shell .widget-wall > *:nth-child(2) { animation-delay: .06s; }
+.admin-shell .widget-wall > *:nth-child(3) { animation-delay: .12s; }
+.admin-shell .widget-wall > *:nth-child(4) { animation-delay: .18s; }
+.admin-shell .widget-wall > *:nth-child(5) { animation-delay: .24s; }
+.admin-shell .widget-wall > *:nth-child(6) { animation-delay: .3s; }
+.admin-shell .widget-wall > *:nth-child(7) { animation-delay: .36s; }
+.admin-shell .widget-wall > *:nth-child(8) { animation-delay: .42s; }
+.admin-shell .status-row > section:nth-child(2) { animation-delay: .48s; }
+.admin-shell .status-row > section:nth-child(3) { animation-delay: .54s; }
+
+/* bottom tab-bar clearance (live-audit fix): the last element of any page
+   must always be able to scroll fully clear of the fixed tab bar */
+html { scroll-padding-bottom: 116px; }
+@media (max-width: 860px) {
+  .admin-main { padding-bottom: calc(124px + env(safe-area-inset-bottom)); }
+  .admin-footer { padding-bottom: calc(124px + env(safe-area-inset-bottom)); }
+}
