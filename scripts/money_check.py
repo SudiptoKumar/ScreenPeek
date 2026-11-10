@@ -59,9 +59,12 @@ class D1:
         self.token = os.environ["CLOUDFLARE_API_TOKEN"]
 
     def query(self, sql):
-        out = http_json(self.url, headers={"Authorization": "Bearer " + self.token,
-                                           "Content-Type": "application/json"},
-                        data=json.dumps({"sql": sql}).encode())
+        try:
+            out = http_json(self.url, headers={"Authorization": "Bearer " + self.token,
+                                               "Content-Type": "application/json"},
+                            data=json.dumps({"sql": sql}).encode())
+        except urllib.error.HTTPError as err:
+            raise RuntimeError(f"D1 HTTP {err.code}: " + err.read().decode('utf-8', 'replace')[:300])
         if not out.get("success"):
             raise RuntimeError("D1 error: " + json.dumps(out.get("errors"))[:300])
         return out["result"]
@@ -72,6 +75,12 @@ class D1:
 
     def run(self, sql):
         self.query(sql)
+
+    def run_many(self, statements):
+        # The D1 query endpoint takes ONE statement per call; a joined batch
+        # is rejected with HTTP 400 (learned from the first live run).
+        for sql in statements:
+            self.query(sql)
 
 
 def esc(value):
@@ -113,9 +122,13 @@ def main():
     today = date.today()  # runner clock is UTC; stats days are UTC
     d1 = D1()
 
-    # ---- 1) daily totals from the epoch (one sequential call) -------------
+    # ---- 1) daily totals (one sequential call) ----------------------------
+    # Window: from the epoch while the table is empty (first backfill), then
+    # a rolling 45 days (older rows are already stored; totals read from D1).
+    stored = int((d1.rows("SELECT COUNT(*) AS c FROM adsterra_days") or [{"c": 0}])[0]["c"])
+    pull_start = EPOCH if stored == 0 else max(EPOCH, today - timedelta(days=45))
     daily = adsterra("stats.json", {"domain": DOMAIN_ID,
-                                    "start_date": EPOCH.isoformat(),
+                                    "start_date": pull_start.isoformat(),
                                     "finish_date": today.isoformat(),
                                     "group_by[]": "date"})
     items = daily.get("items") or []
@@ -127,7 +140,7 @@ def main():
             f"VALUES('{esc(row['date'])}', {int(row.get('impression', 0))}, {int(row.get('clicks', 0))}, "
             f"{float(row.get('ctr', 0))}, {float(row.get('cpm', 0))}, {float(row.get('revenue', 0))}, datetime('now'))")
     if stmts:
-        d1.run(";\n".join(stmts) + ";")
+        d1.run_many(stmts)
 
     # ---- 2) per-placement split for the last 31 days ----------------------
     start31 = max(EPOCH, today - timedelta(days=30))
@@ -145,7 +158,7 @@ def main():
                     f"VALUES('{esc(row['date'])}', {int(row['placement_id'])}, {int(row.get('impression', 0))}, "
                     f"{int(row.get('clicks', 0))}, {float(row.get('revenue', 0))})")
         if srows:
-            d1.run(";\n".join(srows) + ";")
+            d1.run_many(srows)
             placed = len(srows)
     except Exception as exc:
         print("placement split (multi-group) failed, trying per-day:", exc)
@@ -167,7 +180,7 @@ def main():
                         f"VALUES('{day.isoformat()}', {int(pid)}, {int(row.get('impression', 0))}, "
                         f"{int(row.get('clicks', 0))}, {float(row.get('revenue', 0))})")
         if srows:
-            d1.run(";\n".join(srows) + ";")
+            d1.run_many(srows)
             placed = len(srows)
     print(f"placement rows stored: {placed}")
 
@@ -230,7 +243,9 @@ def main():
                 or [{"t": 0}])[0]["t"])
             payable = through - paid_modeled
             minimum_raw = get_config(d1, "payout_min_usd")
-            minimum = float(minimum_raw) if minimum_raw else None
+            # Karn's payout method is crypto (USDT/BTC): $100 minimum.
+            # Override any time via the D1 config key payout_min_usd.
+            minimum = float(minimum_raw) if minimum_raw else 100.0
             if payable > 0 and (minimum is None or payable >= minimum):
                 window = "1st–2nd" if payday.day == 1 else "16th–17th"
                 msg = (f"💸 Payout expected: about {money(payable)}\n"
@@ -264,6 +279,10 @@ def main():
                  f"Earned all time: {money(total)} · Balance (estimate): {money(balance_est)}"]
         if nxt:
             lines.append(f"Next milestone: {money(nxt)} ({money(nxt - total)} to go)")
+        if balance_est < 100:
+            lines.append(f"Payout progress: {money(balance_est)} of the $100 crypto minimum")
+        else:
+            lines.append(f"Balance is over the $100 payout minimum — next expected payout window applies.")
         if send_telegram("\n".join(lines)) or not bot_ready:
             record("money_last_daily", today.isoformat())
 
