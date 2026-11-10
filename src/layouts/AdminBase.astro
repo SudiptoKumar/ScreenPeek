@@ -1,0 +1,29 @@
+---
+import '../styles/site.css';
+import '../styles/admin.css';
+interface Props { title: string; }
+const { title } = Astro.props;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#0B0B10" />
+    <title>{title} — ScreenPeek Admin</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body class="admin-shell">
+    <header class="admin-topbar">
+      <div class="admin-topbar-inner">
+        <a class="admin-brand" href="/admin/">Screen<span>Peek</span> <em>Admin</em></a>
+        <a class="admin-view-site" href="/">View site ↗</a>
+      </div>
+    </header>
+    <main class="admin-main">
+      <slot />
+    </main>
+    <footer class="admin-footer">ScreenPeek Admin · This area is private — only signed-in admins can see it.</footer>
+  </body>
+</html>
