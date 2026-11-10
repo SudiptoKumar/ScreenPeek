@@ -1,0 +1,46 @@
+name: DB bootstrap (manual, one-time)
+
+# One-time production setup: applies db/schema.sql and the additive
+# migrations to the REMOTE D1 database. The sync engine never creates
+# tables, so a brand-new remote database needs this before the first
+# sync. Manual dispatch only; never runs on a schedule or push.
+# The sample seed is never applied remotely.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: screenpeek-db-bootstrap
+  cancel-in-progress: false
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci --no-fund
+      - name: Apply schema and migrations to remote D1
+        shell: bash
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+          KV_NAMESPACE_ID: ${{ secrets.KV_NAMESPACE_ID }}
+        run: |
+          # Point the runner's copy of wrangler.toml at the real resources.
+          # The committed file keeps placeholders; this edit is never committed.
+          sed -i "s/00000000-0000-0000-0000-000000000001/${D1_DATABASE_ID}/" wrangler.toml
+          sed -i "s/00000000000000000000000000000001/${KV_NAMESPACE_ID}/" wrangler.toml
+          node scripts/tool.mjs wrangler d1 execute DB --remote --file db/schema.sql
+          yes | node scripts/tool.mjs wrangler d1 migrations apply DB --remote
