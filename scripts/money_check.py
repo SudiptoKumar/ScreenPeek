@@ -141,12 +141,11 @@ def send_alert(rich_html, fallback_html):
 
 
 # ---------- live widget cards (pinned dashboards, updated in place) ----------
-WIDGET_FILES = [("money_widget2_msg", "emerald_vault.html"),
-                ("money_widget3_msg", "solar_pulse.html")]
+WIDGET_FILES = [("money_widget2_msg", "emerald_vault.html")]
 # Bump whenever the widget HTML designs change: on the next run the checker
 # sends FRESH widget messages with the new designs and takes over their IDs
 # (a sent widget's HTML itself can never be edited in place).
-WIDGET_VERSION = "v3-2026-11-11"
+WIDGET_VERSION = "v4-2026-11-11"
 
 
 def bot_call(method, payload):
