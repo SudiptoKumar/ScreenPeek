@@ -1,0 +1,37 @@
+name: Access auth log
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  log:
+    if: vars.SCREENPEEK_SYNC_ENABLED == '1' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: Read recent Access authentication log
+        run: |
+          python3 - <<'PYEOF'
+          import json, os, urllib.request, urllib.error
+          acct = os.environ['CLOUDFLARE_ACCOUNT_ID']; token = os.environ['CLOUDFLARE_API_TOKEN']
+          def call(path):
+              r = urllib.request.Request('https://api.cloudflare.com/client/v4' + path, method='GET')
+              r.add_header('Authorization', 'Bearer ' + token)
+              try:
+                  with urllib.request.urlopen(r) as resp: return json.load(resp)
+              except urllib.error.HTTPError as e:
+                  return {'success': False, 'errors': [{'message': f'HTTP {e.code}: ' + e.read().decode("utf-8", "replace")[:400]}]}
+          res = call(f'/accounts/{acct}/access/logs/access_requests?limit=25&direction=desc')
+          print('success:', res.get('success'))
+          if not res.get('success'): print('errors:', json.dumps(res.get('errors'))[:400])
+          for row in (res.get('result') or []):
+              print(json.dumps({k: row.get(k) for k in ['created_at','email','app_uid','app_domain','decision','allowed','ip_address','user_email'] if k in row})[:400])
+              extra = {k: v for k, v in row.items() if k not in ['created_at','email','app_uid','app_domain','decision','allowed','ip_address','user_email']}
+              if extra: print('  extra:', json.dumps(extra)[:400])
+          PYEOF
