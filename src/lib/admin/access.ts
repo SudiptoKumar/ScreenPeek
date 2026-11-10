@@ -33,39 +33,40 @@ export async function verifyAccess(request: Request, env: Pick<AccessEnvironment
   if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.cloudflareaccess\.com$/.test(env.CF_ACCESS_TEAM_DOMAIN) || env.CF_ACCESS_AUD.length > 256) throw new AdminError('Admin access configuration needs attention.', 503);
   const token = request.headers.get('Cf-Access-Jwt-Assertion');
   const emailHeader = request.headers.get('Cf-Access-Authenticated-User-Email')?.trim().toLowerCase();
-  if (!token || token.length > 16_384 || !emailHeader) return null;
+  if (!token || token.length > 16_384 || !emailHeader) { console.log('[access-debug] no-headers', JSON.stringify({ token: !!token, emailHeader: !!emailHeader })); return null; }
   const issuer = `https://${env.CF_ACCESS_TEAM_DOMAIN}`;
   try {
     const parts = token.split('.');
-    if (parts.length !== 3) return null;
+    if (parts.length !== 3) { console.log('[access-debug] bad-parts'); return null; }
     const header = parse(parts[0]), payload = parse(parts[1]);
-    if (header.alg !== 'RS256' || typeof header.kid !== 'string' || header.kid.length > 128) return null;
+    if (header.alg !== 'RS256' || typeof header.kid !== 'string' || header.kid.length > 128) { console.log('[access-debug] bad-header', JSON.stringify({ alg: header.alg, kid: typeof header.kid })); return null; }
     const now = Math.floor(Date.now() / 1000);
     const audience = payload.aud;
     if (payload.iss !== issuer || !(audience === env.CF_ACCESS_AUD || (Array.isArray(audience) && audience.includes(env.CF_ACCESS_AUD))) ||
       typeof payload.exp !== 'number' || !Number.isSafeInteger(payload.exp) || payload.exp <= now ||
       (payload.nbf !== undefined && (typeof payload.nbf !== 'number' || !Number.isFinite(payload.nbf) || payload.nbf > now + 30)) ||
       (payload.iat !== undefined && (typeof payload.iat !== 'number' || !Number.isFinite(payload.iat) || payload.iat > now + 30)) ||
-      typeof payload.email !== 'string' || payload.email.length > 254 || payload.email.trim().toLowerCase() !== emailHeader || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailHeader)) return null;
+      typeof payload.email !== 'string' || payload.email.length > 254 || payload.email.trim().toLowerCase() !== emailHeader || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailHeader)) { console.log('[access-debug] claims', JSON.stringify({ iss: payload.iss, issOk: payload.iss === issuer, aud: payload.aud, audOk: audience === env.CF_ACCESS_AUD || (Array.isArray(audience) && audience.includes(env.CF_ACCESS_AUD)), exp: payload.exp, now, email: payload.email, emailHeader })); return null; }
     let cached = keyCache.get(issuer);
     if (!cached || cached.expires < Date.now()) {
       const response = await fetcher(`${issuer}/cdn-cgi/access/certs`, { redirect: 'error', signal: AbortSignal.timeout(5000), headers: { Accept: 'application/json' } });
-      if (!response.ok) return null;
+      if (!response.ok) { console.log('[access-debug] certs-http', response.status); return null; }
       const text = await response.text();
-      if (text.length > 100_000) return null;
+      if (text.length > 100_000) { console.log('[access-debug] certs-size'); return null; }
       const data: unknown = JSON.parse(text);
-      if (!record(data) || !Array.isArray(data.keys)) return null;
+      if (!record(data) || !Array.isArray(data.keys)) { console.log('[access-debug] certs-shape'); return null; }
       const keys = data.keys.filter((key): key is JsonWebKey & { kid: string } => record(key) && key.kty === 'RSA' && typeof key.kid === 'string' && typeof key.n === 'string' && typeof key.e === 'string' && (!key.use || key.use === 'sig')).slice(0, 8);
       cached = { expires: Date.now() + 300_000, keys };
       if (keyCache.size >= 8) keyCache.delete(keyCache.keys().next().value!);
       keyCache.set(issuer, cached);
     }
     const jwk = cached.keys.find(key => key.kid === header.kid);
-    if (!jwk || !jwk.n || decode(jwk.n).length < 256 || decode(jwk.n).length > 1024) return null;
+    if (!jwk || !jwk.n || decode(jwk.n).length < 256 || decode(jwk.n).length > 1024) { console.log('[access-debug] kid-or-key', JSON.stringify({ kid: header.kid, kids: cached.keys.map(k => k.kid) })); return null; }
     const key = await crypto.subtle.importKey('jwk', { kty: 'RSA', n: jwk.n, e: jwk.e, alg: 'RS256', ext: true }, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify']);
-    if (!await crypto.subtle.verify('RSASSA-PKCS1-v1_5', key, decode(parts[2]), new TextEncoder().encode(`${parts[0]}.${parts[1]}`))) return null;
+    if (!await crypto.subtle.verify('RSASSA-PKCS1-v1_5', key, decode(parts[2]), new TextEncoder().encode(`${parts[0]}.${parts[1]}`))) { console.log('[access-debug] sig-fail'); return null; }
+    console.log('[access-debug] ok', emailHeader);
     return emailHeader;
-  } catch { return null; }
+  } catch (error) { console.log('[access-debug] exception', error instanceof Error ? error.message.slice(0, 120) : 'unknown'); return null; }
 }
 export async function authenticateAdmin(request: Request, env: AccessEnvironment, fetcher: typeof fetch = fetch): Promise<AdminIdentity | null> {
   const email = await verifyAccess(request, env, fetcher);
