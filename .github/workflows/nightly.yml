@@ -29,7 +29,12 @@ jobs:
     # remote writes disabled, including scheduled runs and manual dispatches.
     if: vars.SCREENPEEK_SYNC_ENABLED == '1' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Backstop only. The sync engine self-limits (12 min scheduled, 25 min
+    # targeted) and defers unfinished work, so a job should never be killed
+    # mid-title before its summary and deferrals are saved. 30 min proved
+    # too tight for cold-start imports of large series; 120 removes the
+    # failure mode without changing how long runs actually take.
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v7
         with:
