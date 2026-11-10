@@ -15,7 +15,7 @@ test('owner list UI applies multi-row changes, exports CSV, confirms referenced 
   await expect(page.getByText('Used in 1 places.',{exact:false})).toBeVisible();
   const trashList=page.getByRole('region',{name:'Record list controls',exact:true});await trashList.locator('input[name="u_keys"]').filter({visible:true}).first().uncheck();
   await trashList.locator('input[name="u_keys"]').evaluateAll((nodes,key)=>{for(const node of nodes)if((node as HTMLInputElement).value===key)(node as HTMLInputElement).click()},JSON.stringify([-10003,'movie']));
-  await trashList.locator('input[name="confirm_used"]').check();await trashList.getByRole('button',{name:'Move selected to Trash',exact:true}).click();
+  await trashList.locator('label',{hasText:'Confirm deletion of referenced items'}).locator('input[name="confirm_used"]').check();await trashList.getByRole('button',{name:'Move selected to Trash',exact:true}).click();
   expect((await worker.local.db.query("SELECT deleted_at FROM titles WHERE id=-10003 AND type='movie'"))[0].deleted_at).toBeTruthy();
   await page.goto(worker.base+'/admin/changes/?list=admin_trash');await page.getByRole('button',{name:'Restore item',exact:true}).click();
   expect((await worker.local.db.query("SELECT deleted_at FROM titles WHERE id=-10003 AND type='movie'"))[0].deleted_at).toBeNull();
