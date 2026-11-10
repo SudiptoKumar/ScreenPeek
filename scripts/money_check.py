@@ -114,6 +114,30 @@ def send_telegram(text):
         return False
 
 
+def send_rich(html):
+    """Telegram Rich Messages (headings, tables, blockquotes, expandables).
+    Returns False when the client/API rejects it; callers fall back."""
+    token = os.environ.get("MONEY_BOT_TOKEN")
+    chat = os.environ.get("MONEY_BOT_CHAT_ID")
+    if not token or not chat:
+        return False
+    try:
+        out = http_json(f"https://api.telegram.org/bot{token}/sendRichMessage",
+                        headers={"Content-Type": "application/json"},
+                        data=json.dumps({"chat_id": chat, "rich_message": {"html": html}}).encode())
+        print("telegram rich: sent" if out.get("ok") else f"telegram rich: failed {out}")
+        return bool(out.get("ok"))
+    except Exception as exc:
+        print("telegram rich: error", exc)
+        return False
+
+
+def send_alert(rich_html, fallback_html):
+    if send_rich(rich_html):
+        return True
+    return send_telegram(fallback_html)
+
+
 def money(value):
     return f"${value:,.2f}"
 
@@ -203,7 +227,10 @@ def main():
                "ScreenPeek just made its first money from ads.\n"
                f"💰 Total earned: <b>{money(total)}</b>\n\n"
                "<i>The ads are live and working. Next stop: the $10 milestone.</i>")
-        sent = send_telegram(msg) if bot_ready else False
+        rich = ("<h3>🎉 First earning!</h3>"
+                f"<blockquote>💰 <b>{money(total)} earned</b> — the ads are live and working.</blockquote>"
+                "<p>Next stop: the <b>$10</b> milestone.</p>")
+        sent = send_alert(rich, msg) if bot_ready else False
         if sent or not bot_ready:
             record("money_first_earning_done", "1")
 
@@ -215,8 +242,12 @@ def main():
                f"💰 Total earnings: <b>{money(total)}</b>"
                + (f"\n🎯 Next milestone: <b>{money(nxt)}</b> ({money(nxt - total)} to go)" if nxt else "")
                + "\n\n<i>ScreenPeek keeps earning while you sleep.</i>")
+        rich = (f"<h3>🏆 Milestone complete — {money(m)}!</h3>"
+                f"<blockquote>💰 <b>Total earnings: {money(total)}</b></blockquote>"
+                + (f"<p>🎯 Next milestone: <b>{money(nxt)}</b> ({money(nxt - total)} to go)</p>" if nxt else "")
+                + "<p><i>ScreenPeek keeps earning while you sleep.</i></p>")
         if bot_ready:
-            if send_telegram(msg):
+            if send_alert(rich, msg):
                 fired.add(m)
         else:
             fired.add(m)  # no bot yet: don't replay history when the bot arrives
@@ -258,7 +289,15 @@ def main():
                        f"🗓 Adsterra pays on the <b>{window} ({payday.strftime('%B %Y')})</b>, 09:00–18:00 GMT\n"
                        "💳 Method: Crypto — minimum reached ✓\n\n"
                        "<i>This is the calendar expectation from your revenue. Adsterra's Payouts page is the final confirmation.</i>")
-                sent = send_telegram(msg) if bot_ready else False
+                rich = (f"<h3>💸 Payout expected — about {money(payable)}</h3>"
+                        "<table><tbody>"
+                        f"<tr><td>📅 Period</td><td>Up to <b>{p_end.strftime('%b %d, %Y')}</b></td></tr>"
+                        f"<tr><td>🗓 Pay window</td><td><b>{window} ({payday.strftime('%B %Y')})</b>, 09:00–18:00 GMT</td></tr>"
+                        "<tr><td>💳 Method</td><td>Crypto (USDT/BTC)</td></tr>"
+                        "</tbody></table>"
+                        "<ul><li>☑️ Balance passed the $100 minimum</li></ul>"
+                        "<blockquote><i>Calendar expectation from your revenue — Adsterra's Payouts page is the final confirmation.</i></blockquote>")
+                sent = send_alert(rich, msg) if bot_ready else False
                 if sent or not bot_ready:
                     record("money_last_payout_alert", pkey)
                     paid_modeled += payable
@@ -290,13 +329,26 @@ def main():
                  f"💰 <b>Balance (estimate):</b> {money(balance_est)}"]
         if nxt:
             lines.append(f"🎯 <b>Next milestone:</b> {money(nxt)} ({money(nxt - total)} to go)")
+        filled = int(balance_est / 100 * 10) if balance_est < 100 else 10
+        bar = "▰" * filled + "▱" * (10 - filled)
         if balance_est < 100:
-            filled = int(balance_est / 100 * 10)
-            bar = "▰" * filled + "▱" * (10 - filled)
             lines.append(f"🚀 <b>Payout progress:</b> {money(balance_est)} of $100\n{bar}")
         else:
             lines.append("🚀 <b>Payout minimum reached</b> — the next pay window (1st–2nd / 16th–17th) applies.")
-        if send_telegram("\n".join(lines)) or not bot_ready:
+        rich_lines = [
+            "<h3>📊 ScreenPeek — Daily Money Summary</h3>",
+            f"<p><i>Yesterday · {yday.strftime('%b %d')} (UTC day)</i></p>",
+            (f"<blockquote><b>💵 Revenue: {money(float(yrow['revenue']))}</b><br>👁 {int(yrow['impressions']):,} impressions · 🖱 {int(yrow['clicks'])} clicks · 📈 CPM ${float(yrow['cpm']):.2f}</blockquote>" if yrow else "<blockquote><b>💵 Revenue: $0.00</b><br><i>No ad data recorded for yesterday.</i></blockquote>"),
+            "<hr>",
+            "<h4>📅 This month</h4>",
+            f"<table><tbody><tr><td>Revenue</td><td><b>{money(float(mrow['r']))}</b></td></tr><tr><td>Impressions</td><td><b>{int(mrow['i']):,}</b></td></tr></tbody></table>",
+            "<h4>🏦 Totals</h4>",
+            f"<table><tbody><tr><td>Earned all time</td><td><b>{money(total)}</b></td></tr><tr><td>Balance (estimate)</td><td><b>{money(balance_est)}</b></td></tr>"
+            + (f"<tr><td>Next milestone</td><td><b>{money(nxt)}</b> ({money(nxt - total)} to go)</td></tr>" if nxt else "") + "</tbody></table>",
+            (f"<p>🚀 <b>Payout progress:</b> {money(balance_est)} of $100<br>{bar}</p>" if balance_est < 100 else "<p>🚀 <b>Payout minimum reached</b> — the next pay window (1st–2nd / 16th–17th) applies.</p>"),
+            "<details><summary>ℹ️ How to read these numbers</summary><p>Figures come from Adsterra's official API and refresh every 30 minutes. Balance is an estimate: all earnings minus the payouts Adsterra's pay calendar says should already have been made.</p></details>",
+        ]
+        if send_alert("\n".join(rich_lines), "\n".join(lines)) or not bot_ready:
             record("money_last_daily", today.isoformat())
 
     record("money_last_total", f"{total:.3f}")
