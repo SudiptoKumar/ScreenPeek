@@ -42,10 +42,17 @@ try {
     images = new R2Store({ accountId: required('CLOUDFLARE_ACCOUNT_ID'), bucket: required('R2_BUCKET'), accessKeyId: required('R2_ACCESS_KEY_ID'), secretAccessKey: required('R2_SECRET_ACCESS_KEY') });
   }
   if (fixture) await db.batch([{ sql: "INSERT INTO config(key,value) VALUES('dev:fixture_import','1') ON CONFLICT(key) DO UPDATE SET value=excluded.value" }]);
+  // Manual imports may need a longer clock than the engine's 12-minute
+  // default; the operator can raise it per run via SYNC_MAX_DURATION_MS,
+  // clamped to [1 minute, 25 minutes] so it stays inside the job timeout.
+  const requestedDuration = Number(process.env.SYNC_MAX_DURATION_MS);
+  const maxDurationMs = Number.isSafeInteger(requestedDuration) && requestedDuration > 0
+    ? Math.min(Math.max(requestedDuration, 60_000), 25 * 60_000) : undefined;
   const summary = await runSync({ db, images, client,
     environment: fixture ? {} : process.env,
     source: process.env.GITHUB_EVENT_NAME === 'schedule' ? 'cron' : 'manual',
     targets: targets.length ? targets : undefined, personIds: personIds.length ? personIds : undefined,
+    maxDurationMs,
   });
   console.log(JSON.stringify({ local, fixture, ...summary }, null, 2));
   if (summary.status === 'partial' && process.env.GITHUB_ACTIONS === 'true') console.warn('::warning::Sync completed with partial or deferred work. Review the sync log before treating the catalogue as fully refreshed.');

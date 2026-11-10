@@ -44,6 +44,7 @@ jobs:
         shell: bash
         env:
           SYNC_IDS: ${{ inputs.ids }}
+          SYNC_MAX_DURATION_MS: ${{ vars.SYNC_MAX_DURATION_MS }}
           TMDB_READ_TOKEN: ${{ secrets.TMDB_READ_TOKEN }}
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           TMDB_BASE_URL: ${{ vars.TMDB_BASE_URL }}

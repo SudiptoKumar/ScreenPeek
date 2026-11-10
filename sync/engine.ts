@@ -65,7 +65,11 @@ export async function runSync(options: {
       } catch { warn('An invalid queued candidate was ignored.'); }
     }
     const manual = Boolean(options.targets || options.personIds);
-    const filtered = filterCandidates([...queued, ...collected.titles], { existing, blocklist: blocked, now,
+    // A targeted (manual) import must import exactly the requested titles.
+    // Merging the deferred queue in would rank the targets behind thousands
+    // of queued candidates and they would never reach the selection window.
+    // Queue rows themselves stay untouched in the database for cron runs.
+    const filtered = filterCandidates(manual ? collected.titles : [...queued, ...collected.titles], { existing, blocklist: blocked, now,
       maxTitles: options.maxTitles ?? Math.min(2000, Number(config.sync_max_titles || 2000)), popularityGate: manual ? 0 : threshold });
     const usedSlugs = new Set([...existing.values()].map(row => row.slug));
     const usedPeopleSlugs = new Set([...people.values()].map(row => row.slug));
