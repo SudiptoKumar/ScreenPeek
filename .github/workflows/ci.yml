@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI: 'true'
+      ADS_ENABLED: '0'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci --no-fund
+      - name: Prepare local sample database
+        run: npm run db:setup
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Enforce source API boundary
+        run: npm run check:boundaries
+      - name: Source client, collection, and transformation tests
+        run: npm run test:sync
+      - name: Image and R2 signing tests
+        run: npm run test:images
+      - name: Sync persistence and recovery integration tests
+        run: npm run test:sync-integration
+      - name: Private backup encoding and retention tests
+        run: |
+          npm run test:backup
+          npm run backup:local
+          node scripts/tool.mjs node --test tests/backup-roundtrip.test.ts
+      - name: Database and removable seed tests
+        run: npm run test:database
+      - name: Public catalogue query tests
+        run: npm run test:catalogue
+      - name: Redirect and approximate counter tests
+        run: npm run test:redirects
+      - name: Verdict and daily vote guard tests
+        run: npm run test:votes
+      - name: Ad resolution and preview safety tests
+        run: npm run test:ads
+      - name: Access, admin permissions and audited transaction tests
+        run: npm run test:admin
+      - name: Trust content and Markdown safety tests
+        run: npm run test:trust
+      - name: SEO, sitemap gates and pagination tests
+        run: npm run test:seo
+      - name: Production binding and deployment guard tests
+        run: npm run test:deploy
+      - name: Build Workers application
+        run: npm run build
+      - name: Verify public redirect, removal and 404 policy
+        run: node scripts/tool.mjs node --test tests/route-policy.test.ts
+      - name: Verify static bypass, long-tail and country cache behaviour
+        run: npm run test:static
+      - name: Install Chromium and system dependencies
+        run: npx playwright install --with-deps chromium
+      - name: Verify bloated detail fails the byte-budget gate
+        run: npm run test:performance-gate
+      - name: Gate first-screen own bytes and report Lighthouse mobile
+        run: npm run check:performance
+      - name: Verify image observer and no-JavaScript fallback
+        run: node scripts/tool.mjs node --test tests/image-loading.test.ts
+      - name: Production browser tests
+        run: npm run test:browser
+      - name: Upload browser reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            playwright-report/
+            test-results/
+            .cache/performance/
+          if-no-files-found: ignore
+          retention-days: 14

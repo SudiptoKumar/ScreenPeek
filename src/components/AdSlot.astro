@@ -1,0 +1,21 @@
+---
+import { env } from 'cloudflare:workers';
+import { requestAds } from '../lib/ads';
+import type { AdPage } from '../lib/ads';
+interface Props {
+  pageType: AdPage;
+  placement: 'top_300x250' | 'sticky_320x50' | 'native' | 'infeed' | 'social_bar';
+}
+const { placement, pageType } = Astro.props;
+const dimensions = {
+  top_300x250: [300, 250], sticky_320x50: [320, 50],
+  native: [300, 250], infeed: [300, 250], social_bar: [0, 0],
+}[placement];
+const slot = await requestAds(Astro.locals, env).resolve(pageType, placement);
+---
+{placement === 'social_bar' ? (slot && <div data-ad-page={pageType} data-placement={placement} aria-label="Advertisement" set:html={slot.code} />) :
+<aside class:list={['ad-slot', { 'ad-sticky': placement === 'sticky_320x50', 'ad-filled': !!slot }]}
+  style={`--ad-width:${dimensions[0]}px;--ad-height:${dimensions[1]}px`}
+  aria-label={slot ? 'Advertisement' : 'Advertisement placeholder'} data-placement={placement} data-ad-page={pageType} data-ad-state={slot ? 'filled' : 'placeholder'}>
+  {slot ? <Fragment set:html={slot.code} /> : <span>Advertisement · placeholder</span>}
+</aside>}

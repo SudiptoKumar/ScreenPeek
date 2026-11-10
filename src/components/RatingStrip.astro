@@ -1,0 +1,14 @@
+---
+import type { TitlePageData } from '../lib/detail';
+interface Props { score: number | null; count: number | null; external?: TitlePageData['external']; }
+const { score, count, external = null } = Astro.props;
+const tmdb = score === null || !Number.isFinite(score) ? 'Unrated' : `${score.toFixed(1)}/10`;
+---
+<section class="ratings-strip" aria-label="Ratings" data-detail-section="ratings">
+  <div class="rating-source"><span>TMDb</span><strong>{tmdb}</strong><small>{count === null ? 'Vote count unavailable' : `${count.toLocaleString('en')} votes`}</small></div>
+  {external && <>
+    <div class="rating-source"><span>IMDb</span><strong>{external.imdb === null ? 'Unavailable' : `${external.imdb.toFixed(1)}/10`}</strong></div>
+    <div class="rating-source"><span>Rotten Tomatoes</span><strong>{external.rt === null ? 'Unavailable' : `${external.rt}%`}</strong></div>
+    <div class="rating-source"><span>Metacritic</span><strong>{external.metacritic === null ? 'Unavailable' : `${external.metacritic}/100`}</strong></div>
+  </>}
+</section>

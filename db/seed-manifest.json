@@ -1,0 +1,231 @@
+{
+  "version": 1,
+  "namespace": "screenpeek-sample-v1",
+  "configKey": "dev:sample_data",
+  "titles": [
+    {
+      "id": -10001,
+      "type": "movie"
+    },
+    {
+      "id": -10002,
+      "type": "movie"
+    },
+    {
+      "id": -10003,
+      "type": "movie"
+    },
+    {
+      "id": -10004,
+      "type": "movie"
+    },
+    {
+      "id": -10005,
+      "type": "movie"
+    },
+    {
+      "id": -10006,
+      "type": "movie"
+    },
+    {
+      "id": -10007,
+      "type": "movie"
+    },
+    {
+      "id": -10008,
+      "type": "movie"
+    },
+    {
+      "id": -10009,
+      "type": "movie"
+    },
+    {
+      "id": -10010,
+      "type": "movie"
+    },
+    {
+      "id": -10011,
+      "type": "movie"
+    },
+    {
+      "id": -10012,
+      "type": "movie"
+    },
+    {
+      "id": -10013,
+      "type": "movie"
+    },
+    {
+      "id": -10014,
+      "type": "movie"
+    },
+    {
+      "id": -10015,
+      "type": "movie"
+    },
+    {
+      "id": -10016,
+      "type": "movie"
+    },
+    {
+      "id": -10017,
+      "type": "movie"
+    },
+    {
+      "id": -10018,
+      "type": "movie"
+    },
+    {
+      "id": -10019,
+      "type": "movie"
+    },
+    {
+      "id": -10020,
+      "type": "movie"
+    },
+    {
+      "id": -10021,
+      "type": "movie"
+    },
+    {
+      "id": -10022,
+      "type": "movie"
+    },
+    {
+      "id": -10023,
+      "type": "movie"
+    },
+    {
+      "id": -10024,
+      "type": "movie"
+    },
+    {
+      "id": -10025,
+      "type": "movie"
+    },
+    {
+      "id": -10026,
+      "type": "movie"
+    },
+    {
+      "id": -10027,
+      "type": "movie"
+    },
+    {
+      "id": -10028,
+      "type": "movie"
+    },
+    {
+      "id": -10029,
+      "type": "movie"
+    },
+    {
+      "id": -10030,
+      "type": "movie"
+    },
+    {
+      "id": -10031,
+      "type": "tv"
+    },
+    {
+      "id": -10032,
+      "type": "tv"
+    },
+    {
+      "id": -10033,
+      "type": "tv"
+    },
+    {
+      "id": -10034,
+      "type": "tv"
+    },
+    {
+      "id": -10035,
+      "type": "tv"
+    },
+    {
+      "id": -10036,
+      "type": "tv"
+    },
+    {
+      "id": -10037,
+      "type": "tv"
+    },
+    {
+      "id": -10038,
+      "type": "tv"
+    },
+    {
+      "id": -10039,
+      "type": "tv"
+    },
+    {
+      "id": -10040,
+      "type": "tv"
+    },
+    {
+      "id": -10041,
+      "type": "tv"
+    },
+    {
+      "id": -10042,
+      "type": "tv"
+    },
+    {
+      "id": -10043,
+      "type": "tv"
+    },
+    {
+      "id": -10044,
+      "type": "tv"
+    },
+    {
+      "id": -10045,
+      "type": "tv"
+    },
+    {
+      "id": -10046,
+      "type": "tv"
+    },
+    {
+      "id": -10047,
+      "type": "tv"
+    },
+    {
+      "id": -10048,
+      "type": "tv"
+    },
+    {
+      "id": -10049,
+      "type": "tv"
+    },
+    {
+      "id": -10050,
+      "type": "tv"
+    }
+  ],
+  "peopleIds": [
+    -20012,
+    -20011,
+    -20010,
+    -20009,
+    -20008,
+    -20007,
+    -20006,
+    -20005,
+    -20004,
+    -20003,
+    -20002,
+    -20001
+  ],
+  "sharedLookups": {
+    "genres": [
+      "adventure",
+      "drama",
+      "science-fiction"
+    ],
+    "languages": [
+      "en"
+    ]
+  }
+}

@@ -1,0 +1,16 @@
+---
+import Base from '../layouts/Base.astro';
+import type { TrustPageData } from '../lib/trust';
+interface Props { data: TrustPageData; }
+const { data } = Astro.props;
+const missing = data.status === 404;
+const title = data.document?.title || (missing ? 'Page not found' : 'Page temporarily unavailable');
+---
+<Base title={title} noindex={data.status !== 200} pageType="utility">
+  <article class="trust-page">
+    <header class="page-heading"><a class="back-link" href="/">← Home</a><p class="eyebrow">{missing ? '404 · NOT FOUND' : 'INFORMATION'}</p><h1>{title}</h1></header>
+    {data.html ? <div class="trust-content" set:html={data.html} /> : <p class="quiet-empty">{missing ? 'This page could not be found. Explore the catalogue to find another movie or series.' : 'This information is temporarily unavailable. Please try again shortly.'}</p>}
+    {data.document?.slug === 'about' && <aside class="trust-attribution" aria-label="Data attribution"><img src="/tmdb.svg" width="80" height="80" alt="TMDB" loading="lazy" decoding="async" /><p>This product uses the TMDB API but is not endorsed or certified by TMDB.</p><p>Streaming availability data is provided by JustWatch.</p></aside>}
+    {missing && <div class="detail-actions"><a class="button primary" href="/">Go home</a><a class="button" href="/movies/">Browse movies</a></div>}
+  </article>
+</Base>

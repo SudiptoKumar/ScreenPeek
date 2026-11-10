@@ -1,0 +1,9 @@
+---
+import { env } from 'cloudflare:workers';
+import HubPage from '../../components/HubPage.astro';
+import { loadHubPage } from '../../lib/hubs';
+const data = await loadHubPage(env.DB, 'top10', Astro.url);
+Astro.response.status = data.status;
+Astro.response.headers.set('Cache-Control', data.cacheControl);
+---
+<HubPage data={data} mediaBase={env.R2_PUBLIC_BASE} />

@@ -1,0 +1,9 @@
+---
+import CatalogueList from '../../components/CatalogueList.astro';
+import { env } from 'cloudflare:workers';
+import { loadCataloguePage } from '../../lib/catalogue-page';
+const data = await loadCataloguePage(env.DB, Astro.url, 'movie');
+Astro.response.status = data.status;
+Astro.response.headers.set('Cache-Control', data.cacheControl);
+---
+<CatalogueList data={data} mediaBase={env.R2_PUBLIC_BASE} />

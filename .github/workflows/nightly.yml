@@ -1,0 +1,96 @@
+name: Daily sync
+
+on:
+  schedule:
+    - cron: '30 8 * * *'
+  workflow_dispatch:
+    inputs:
+      ids:
+        description: 'Optional targeted import: movie:123,tv:456,person:789'
+        type: string
+        required: false
+        default: ''
+      deploy:
+        description: Deploy after a successful sync and build (requires deployment enabled)
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: screenpeek-nightly-main
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    # The owner requested local development first. Missing variables leave all
+    # remote writes disabled, including scheduled runs and manual dispatches.
+    if: vars.SCREENPEEK_SYNC_ENABLED == '1' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci --no-fund
+      - name: Sync catalogue and images
+        shell: bash
+        env:
+          SYNC_IDS: ${{ inputs.ids }}
+          TMDB_READ_TOKEN: ${{ secrets.TMDB_READ_TOKEN }}
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          TMDB_BASE_URL: ${{ vars.TMDB_BASE_URL }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+          R2_BUCKET: ${{ vars.R2_BUCKET || 'posters' }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          OWNER_CHAT_ID: ${{ secrets.OWNER_CHAT_ID }}
+          SITE_URL: ${{ vars.SITE_URL }}
+        run: |
+          args=(--remote)
+          if [[ -n "$SYNC_IDS" ]]; then
+            args+=(--ids "$SYNC_IDS")
+          fi
+          # The CLI validates type-prefixed IDs; input is never evaluated as shell.
+          npm run sync:run -- "${args[@]}"
+      - name: Build static hubs and top titles with long-tail Worker
+        env:
+          STATIC_SOURCE_REMOTE: '1'
+          DEPLOYMENT_ENV: production
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+          SITE_NAME: ${{ vars.SITE_NAME || 'ScreenPeek' }}
+          R2_PUBLIC_BASE: ${{ vars.R2_PUBLIC_BASE }}
+          ADS_ENABLED: ${{ vars.ADS_ENABLED || '0' }}
+          SITE_URL: ${{ vars.SITE_URL }}
+        run: npm run build
+      - name: Deploy approved build and purge stale SSR cache
+        if: vars.SCREENPEEK_DEPLOY_ENABLED == '1' && (github.event_name == 'schedule' || inputs.deploy == true)
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+          R2_BACKUP_BUCKET: ${{ vars.R2_BACKUP_BUCKET }}
+          BACKUP_BUCKET_PRIVATE: ${{ vars.BACKUP_BUCKET_PRIVATE }}
+          KV_NAMESPACE_ID: ${{ secrets.KV_NAMESPACE_ID }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          SITE_URL: ${{ vars.SITE_URL }}
+          SITE_NAME: ${{ vars.SITE_NAME || 'ScreenPeek' }}
+          R2_BUCKET: ${{ vars.R2_BUCKET || 'posters' }}
+          R2_PUBLIC_BASE: ${{ vars.R2_PUBLIC_BASE }}
+          ADS_ENABLED: ${{ vars.ADS_ENABLED || '0' }}
+          GITHUB_REPO: ${{ github.repository }}
+          SCREENPEEK_DEPLOY_ENABLED: ${{ vars.SCREENPEEK_DEPLOY_ENABLED }}
+        run: npm run deploy

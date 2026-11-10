@@ -1,0 +1,71 @@
+---
+import { restoreForm } from '../../lib/admin/restore';
+import { env } from 'cloudflare:workers';
+import AdminPanel from '../../components/admin/AdminPanel.astro';
+import { AdminError, permitted, requirePermission } from '../../lib/admin/access';
+import type { AdminModule } from '../../lib/admin/access';
+import { adminData, exportAdminBackup } from '../../lib/admin/data';
+import type { AdminData } from '../../lib/admin/data';
+import { csvRows, listData, listDefaults, listSpec } from '../../lib/admin/universal';
+import { adminForm, applyAdminAction } from '../../lib/admin/actions';
+const allowed = ['dashboard', 'links', 'ads', 'content', 'pages', 'sync', 'settings', 'backup', 'seo', 'changes', 'titles', 'people'];
+const module = (Astro.params.path || 'dashboard') as AdminModule;
+const actor = Astro.locals.admin;
+let data: AdminData | undefined, error = '', message = '', jobUrl: string | undefined, submitted: URLSearchParams | undefined;
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+try {
+  if (Astro.locals.adminFailure) throw new AdminError(Astro.locals.adminFailure.message, Astro.locals.adminFailure.status);
+  if (!allowed.includes(module)) throw new AdminError('Admin module not found.', 404);
+  if (module === 'dashboard' && actor && !permitted(actor, module)) return Astro.redirect('/admin/links/', 302);
+  requirePermission(actor, module);
+  if (Astro.url.searchParams.has('list')) listSpec(actor,Astro.url.searchParams.get('list') || '');
+  if (Astro.request.method === 'POST') {
+    submitted = module==='backup' && Astro.request.headers.get('Content-Type')?.startsWith('multipart/form-data') ? await restoreForm(Astro.request) : await adminForm(Astro.request);
+    const result = await applyAdminAction(env, actor, module, submitted);
+    message = result.message; jobUrl = result.jobUrl;
+    try {
+      const nonce = crypto.randomUUID();
+      await env.CONFIG.put(`admin-flash:${nonce}`, JSON.stringify({ email: actor.email, message, jobUrl }), { expirationTtl: 120 });
+      Astro.cookies.set('admin_notice', nonce, { path: '/admin', httpOnly: true, sameSite: 'strict', secure: Astro.url.protocol === 'https:', maxAge: 120 });
+      const next = new URL(Astro.url);
+      if (module === 'links') next.searchParams.set('edit', submitted.get('slug') || '');
+      return Astro.redirect(next.pathname + next.search, 303);
+    } catch { /* Retain the successful-save result if flash storage is unavailable. */ }
+    submitted = undefined;
+  } else if (!['GET', 'HEAD'].includes(Astro.request.method)) throw new AdminError('Method not allowed.', 405);
+  if (Astro.request.method === 'GET') {
+    const nonce = Astro.cookies.get('admin_notice')?.value || '';
+    if (/^[a-f0-9-]{36}$/.test(nonce)) {
+      try {
+        const notice = await env.CONFIG.get<{ email: string; message: string; jobUrl?: string }>(`admin-flash:${nonce}`, 'json');
+        if (notice?.email === actor.email) { message = notice.message; jobUrl = notice.jobUrl; }
+        await env.CONFIG.delete(`admin-flash:${nonce}`);
+      } catch { /* Delivery status remains available on the Dashboard. */ }
+      Astro.cookies.delete('admin_notice', { path: '/admin' });
+    }
+  }
+  if (Astro.url.searchParams.get('ucsv') === '1') {
+    if (!['owner','editor'].includes(actor.role)) throw new AdminError('Only Owner/Editor roles can export CSV.',403);
+    const name=Astro.url.searchParams.get('list') || listDefaults[module] || '';
+    const records=await listData(env,actor,name,Astro.url,true);
+    return new Response(csvRows(records.rows),{headers:{'Content-Type':'text/csv; charset=utf-8','Content-Disposition':`attachment; filename="screenpeek-${name}.csv"`,'Cache-Control':'private, no-store'}});
+  }
+  if(module==='backup' && Astro.url.searchParams.has('snapshot')){
+    if(actor.role!=='owner'||!env.BACKUPS)throw new AdminError('Owner permission and private backup storage are required.',403);
+    const key=Astro.url.searchParams.get('snapshot')||'';if(!/^backups\/\d{4}-[\w.-]+\.json\.gz$/.test(key))throw new AdminError('Choose a valid private snapshot.');
+    const object=await env.BACKUPS.get(key);if(!object)throw new AdminError('Snapshot not found.',404);
+    return new Response(object.body,{headers:{'Content-Type':'application/gzip','Content-Disposition':`attachment; filename="${key.split('/').pop()}"`,'Cache-Control':'private, no-store'}});
+  }
+  if (module === 'backup' && Astro.url.searchParams.get('download') === '1') {
+    const backup = await exportAdminBackup(env, actor);
+    return new Response(JSON.stringify(backup, null, 2), { headers: { 'Content-Type': 'application/json; charset=utf-8', 'Content-Disposition': `attachment; filename="screenpeek-config-${new Date().toISOString().slice(0, 10)}.json"`, 'Cache-Control': 'private, no-store' } });
+  }
+  data = await adminData(env, actor, module, Astro.url);
+} catch (caught) {
+  Astro.response.status = caught instanceof AdminError ? caught.status : 503;
+  error = caught instanceof AdminError ? caught.message : 'The admin request could not be completed. No live result is confirmed.';
+  if (actor && allowed.includes(module) && permitted(actor, module)) try { data = await adminData(env, actor, module, Astro.url); } catch { /* Keep the original failure visible. */ }
+}
+const secrets = ['CF_ACCESS_TEAM_DOMAIN', 'CF_ACCESS_AUD', 'CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ZONE_ID', 'GITHUB_REPO', 'GITHUB_ACTIONS_TOKEN'].map(name => ({ name, set: !!(env as unknown as Record<string, unknown>)[name] }));
+---
+<AdminPanel module={module} actor={actor} data={data} error={error} message={message} jobUrl={jobUrl} platformAds={env.ADS_ENABLED === '1'} secrets={secrets} submitted={submitted} />

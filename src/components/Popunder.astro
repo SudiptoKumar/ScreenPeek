@@ -1,0 +1,7 @@
+---
+import { env } from 'cloudflare:workers';
+import { requestAds } from '../lib/ads';
+import loader from '../scripts/popunder.js?raw';
+const slot = await requestAds(Astro.locals, env).resolve('detail', 'popunder');
+---
+{slot && <><div hidden data-popunder data-placement="popunder" data-code={slot.code} data-cap-hours={slot.capHours}></div><script is:inline set:html={loader}></script></>}

@@ -1,0 +1,10 @@
+---
+import { env } from 'cloudflare:workers';
+import TrailerPage from '../../components/TrailerPage.astro';
+import { loadTrailerPage } from '../../lib/trailer';
+const data = await loadTrailerPage(env.DB, Astro.params.slug || '');
+Astro.response.status = data.status;
+Astro.response.headers.set('Cache-Control', data.cacheControl);
+Astro.response.headers.set('X-DNS-Prefetch-Control', 'off');
+---
+<TrailerPage data={data} mediaBase={env.R2_PUBLIC_BASE} />

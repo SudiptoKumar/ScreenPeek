@@ -1,0 +1,89 @@
+---
+import HealthReport from './HealthReport.astro';
+import BackupSnapshots from './BackupSnapshots.astro';
+import UniversalList from './UniversalList.astro';
+import AdminAdvanced from './AdminAdvanced.astro';
+import Base from '../../layouts/Base.astro';
+import { permitted } from '../../lib/admin/access';
+import type { AdminIdentity, AdminModule } from '../../lib/admin/access';
+import type { AdminData } from '../../lib/admin/data';
+import { adMap } from '../../lib/ads';
+import { dhakaInput, settingsFields } from '../../lib/admin/actions';
+interface Props { module: AdminModule; actor?: AdminIdentity; data?: AdminData; error?: string; message?: string; jobUrl?: string; platformAds?: boolean; secrets?: Array<{ name: string; set: boolean }>; submitted?: URLSearchParams; }
+const { module, actor, data, error, message, jobUrl, platformAds = false, secrets = [], submitted } = Astro.props;
+const modules = { dashboard: 'Dashboard', links: 'Link Manager', ads: 'Ad Manager', content: 'Content', pages: 'Pages', sync: 'Sync & Data', settings: 'Settings', backup: 'Backup export', seo: 'SEO Center', changes: 'Change Log', titles: 'Titles', people: 'People' } as const;
+const heading = modules[module as keyof typeof modules] || 'Admin';
+const canWrite = actor && permitted(actor, module, true);
+const link = data?.selectedLink;
+const values = (name: string, fallback: unknown = '') => submitted?.get(name) ?? String(fallback ?? '');
+let rules: { byCountry?: Record<string, string>; byDevice?: Record<string, string> } = {};
+try { rules = JSON.parse(link?.rules || '{}'); } catch { /* Empty editor for malformed legacy rules. */ }
+const settingValue = (key: string) => data?.settings.find(setting => setting.key === key);
+const date = (value: string) => Number.isFinite(Date.parse(value)) ? new Intl.DateTimeFormat('en', { timeZone: 'Asia/Dhaka', dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value.endsWith('Z') || value.includes('+') ? value : `${value.replace(' ', 'T')}Z`)) : value;
+const pageLink = (page: number) => { const query = new URLSearchParams(Astro.url.searchParams); query.set('page', String(page)); return `${Astro.url.pathname}?${query}`; };
+---
+<Base title={`${heading} — Admin`} noindex pageType="utility">
+  <div class="admin-heading"><div><p class="eyebrow">SCREENPEEK ADMIN</p><h1>{heading}</h1></div>{actor && <p>{actor.email}<br /><strong>{actor.role}</strong></p>}</div>
+  {actor && <nav class="admin-nav" aria-label="Admin modules">{Object.entries(modules).filter(([key]) => permitted(actor, key as AdminModule)).map(([key, label]) => <a href={`/admin/${key === 'dashboard' ? '' : `${key}/`}`} aria-current={module === key ? 'page' : undefined}>{label}</a>)}</nav>}
+  {error && <p class="notice admin-error" role="alert">{error}</p>}
+  {message && <p class="notice" role="status">{message}{jobUrl && <> <a href={jobUrl} rel="noreferrer">Check the workflow →</a></>}</p>}
+  {actor && data && <>
+    {!error && ['links','ads','content','pages','sync','seo','changes','titles','people'].includes(module) && <UniversalList actor={actor} module={module} />}
+    {['dashboard','seo','changes'].includes(module) && <AdminAdvanced module={module} actor={actor} />}
+    {module === 'dashboard' && <><HealthReport actor={actor} />
+      <div class="admin-meters"><section><h2>Catalogue</h2><p><strong>{data.catalogue?.titles.toLocaleString() || 0}</strong> titles · {data.catalogue?.gated.toLocaleString() || 0} index-ready</p><p>{data.catalogue?.people.toLocaleString() || 0} people</p></section><section><h2>Approx. clicks today</h2><p class="admin-big">≈ {data.catalogue?.clicks.toLocaleString() || 0}</p><small>UTC reporting day · best-effort totals</small></section><section><h2>Last sync</h2><p>{data.sync[0]?.status || 'No sync recorded'}</p>{data.sync[0] && <small>{date(data.sync[0].started_at)} · Bangladesh time</small>}</section><section><h2>Delivery health</h2><p>{data.pending ? `${data.pending} changes await propagation or purge.` : 'No pending delivery records.'}</p><a href="https://dash.cloudflare.com/" rel="noreferrer">Check Cloudflare quotas →</a><p>Quota and revenue numbers are not connected.</p></section></div>
+      <section class="catalogue-section"><h2>Last 20 changes</h2>{data.changes.length ? <div class="admin-table"><table><thead><tr><th>When (Bangladesh)</th><th>Actor</th><th>Change</th></tr></thead><tbody>{data.changes.map(row => <tr><td>{date(row.ts)}</td><td>{row.actor || 'Not recorded'}</td><td>{row.entity} · {row.entity_id}</td></tr>)}</tbody></table></div> : <p class="quiet-empty">No admin changes yet.</p>}</section>
+    </>}
+    {(module === 'links' || module === 'content') && <form class="admin-search" method="get"><label>Search {module === 'links' ? 'links' : 'titles'}<input name="q" value={data.query} maxlength="100" /></label><button type="submit">Search</button><a href={Astro.url.pathname}>Clear</a></form>}
+    {module === 'links' && <>
+      <p class="notice">Click totals are approximate. Rules use country, then device, then the default destination.</p>
+      <div class="admin-table"><table><thead><tr><th>Name / slug</th><th>Type</th><th>State</th><th>Approx. clicks</th><th>Edit</th></tr></thead><tbody>{data.links.map(row => <tr><td>{row.name}<small>/go/{row.slug}/</small></td><td>{row.type}</td><td>{row.enabled ? 'On' : 'Off'}</td><td>≈ {row.clicks_total.toLocaleString()}</td><td><a href={`?edit=${encodeURIComponent(row.slug)}`}>Open</a></td></tr>)}</tbody></table></div>
+      <section class="catalogue-section"><h2>{link ? `Edit ${link.name}` : 'Add link'}</h2>{link && <a href="/admin/links/">Add a different link</a>}
+      <form class="admin-form" method="post"><input type="hidden" name="original_slug" value={link?.slug || ''} /><input type="hidden" name="revision" value={link?.revision ?? -1} />
+        <fieldset disabled={!canWrite}><label>Name *<input name="name" value={values('name', link?.name)} required maxlength="200" /></label>
+        <label>Slug *<input name="slug" value={values('slug', link?.slug)} required pattern="[a-z0-9]+(-[a-z0-9]+)*" maxlength="120" readonly={!!link?.clicks_total} aria-describedby="link-slug-help" /></label><small id="link-slug-help">Lowercase words and hyphens. Locked after recorded clicks.</small>
+        <label>Type *<select name="type">{['affiliate', 'smartlink', 'social', 'other'].map(type => <option value={type} selected={values('type', link?.type || 'affiliate') === type}>{type}</option>)}</select></label>
+        <label>Default destination *<input name="destination" type="url" value={values('destination', link?.destination)} required maxlength="2048" placeholder="https://" /></label>
+        {['US', 'GB', 'CA', 'AU'].map(country => <label>{country} destination<input type="url" name={`country_${country}`} value={values(`country_${country}`, rules?.byCountry?.[country])} maxlength="2048" placeholder="Optional HTTPS URL" /></label>)}
+        {['mobile', 'desktop'].map(device => <label>{device} destination<input type="url" name={`device_${device}`} value={values(`device_${device}`, rules?.byDevice?.[device])} maxlength="2048" placeholder="Optional HTTPS URL" /></label>)}
+        <label class="admin-check"><input name="enabled" type="checkbox" value="1" checked={submitted ? submitted.has('enabled') : link ? !!link.enabled : true} /> Enabled</label>
+        <label>Start (Bangladesh time)<input name="starts_at" type="datetime-local" value={values('starts_at', dhakaInput(link?.starts_at))} /></label><label>End (Bangladesh time)<input name="ends_at" type="datetime-local" value={values('ends_at', dhakaInput(link?.ends_at))} /></label>
+        <p class="admin-help">SSR changes follow successful propagation and cache purge. Static pages update on the next build.</p><button class="primary" type="submit">Save link</button></fieldset>
+      </form></section>
+    </>}
+    {module === 'ads' && <>
+      <p class="notice">{platformAds ? 'Platform ads flag is on. The master switch and individual slot switches still apply.' : 'This deployment forces ad placeholders. Saved codes cannot run until its platform ADS_ENABLED flag is enabled.'}</p>
+      <div class="admin-settings">{(['ads_enabled', 'popunder_cap_hours','ads_display_enabled','ads_native_enabled','ads_sticky_enabled','ads_social_enabled','ads_popunder_enabled','ads_txt'] as const).map(key => <form class="admin-form" method="post"><input type="hidden" name="key" value={key} /><input type="hidden" name="revision" value={settingValue(key)?.revision ?? -1} /><fieldset disabled={!canWrite}><label>{settingsFields[key]}{key === 'ads_txt' ? <textarea name="value" rows="8" maxlength="20000">{settingValue(key)?.value || ''}</textarea> : <input name="value" value={settingValue(key)?.value ?? (key === 'popunder_cap_hours' ? '24' : key === 'ads_enabled' ? '0' : '1')} />}</label><small>{key === 'popunder_cap_hours' ? '1–168 hours; default 24.' : key === 'ads_txt' ? 'Plain text. Served at /ads.txt.' : '0 = off · 1 = on. Platform and master switches also apply.'}</small><button type="submit">Save {settingsFields[key].toLowerCase()}</button></fieldset></form>)}</div>
+      <p>Use a separate placement code for each card. Test-mode codes require a verified admin preview with <code>?adtest=1</code>.</p>
+      <div class="admin-slot-board">{Object.entries(adMap).flatMap(([page, placements]) => placements.map(placement => {
+        const row = data.slots.find(slot => slot.page_type === page && slot.placement === placement);
+        const duplicates = row?.code.trim() ? data.slots.filter(other => other.code.trim() === row.code.trim() && (other.page_type !== page || other.placement !== placement)) : [];
+        return <section class="admin-slot" id={`slot-${page}-${placement}`}><h2>{page} / {placement}</h2><p class="eyebrow">{row?.code.trim() ? row.enabled ? 'FILLED · ON' : 'FILLED · OFF' : 'EMPTY'}</p>{duplicates.length > 0 && <p class="notice admin-error">Duplicate code also used in {duplicates.map(slot => `${slot.page_type}/${slot.placement}`).join(', ')}. Create separate provider placements.</p>}
+          <form class="admin-form" method="post"><input type="hidden" name="page_type" value={page} /><input type="hidden" name="placement" value={placement} /><input type="hidden" name="revision" value={row?.revision ?? -1} /><fieldset disabled={!canWrite}>
+            <label>Original code<textarea name="code" rows="5" maxlength="65536" spellcheck="false">{submitted?.get('page_type') === page && submitted?.get('placement') === placement ? submitted.get('code') : row?.code || ''}</textarea><small>Suggested provider placement name: {page}_{placement}. Code is stored unchanged.</small></label>
+            <label class="admin-check"><input type="checkbox" name="enabled" value="1" checked={!!row?.enabled} /> Enabled</label><label class="admin-check"><input type="checkbox" name="test_mode" value="1" checked={!!row?.test_mode} /> Authenticated test mode</label>
+            <label>Start (Bangladesh time)<input name="starts_at" type="datetime-local" value={dhakaInput(row?.starts_at)} /></label><label>End (Bangladesh time)<input name="ends_at" type="datetime-local" value={dhakaInput(row?.ends_at)} /></label>
+            <small>Static pages refresh their code and schedule on the next build.</small><button type="submit">Save {page}/{placement}</button>
+          </fieldset></form>
+        </section>;
+      }))}</div>
+    </>}
+    {module === 'content' && <><p>Pin a title for homepage priority or hide it from public pages. Hidden titles can be restored here.</p><div class="admin-content">{data.titles.map(title => <form class="admin-form admin-title-row" method="post"><h2><a href={`/${title.type === 'movie' ? 'movie' : 'tv'}/${title.slug}/`}>{title.title}</a></h2><input type="hidden" name="id" value={title.id} /><input type="hidden" name="type" value={title.type} /><input type="hidden" name="revision" value={title.revision} /><fieldset disabled={!canWrite}><label class="admin-check"><input type="checkbox" name="pinned" value="1" checked={!!title.pinned} /> Pinned</label><label class="admin-check"><input type="checkbox" name="hidden" value="1" checked={!!title.hidden} /> Hidden</label><button type="submit">Save title visibility</button></fieldset></form>)}</div></>}
+    {module === 'sync' && <><p>Daily sync is scheduled for 2:30 pm Bangladesh time. GitHub Actions holds the TMDb credentials; visitors never call the source API.</p>{canWrite && <form method="post"><input type="hidden" name="action" value="run-sync" /><button class="primary" type="submit">Run sync now</button></form>}<p>Repository enable switches still govern execution. This action does not request deployment.</p><div class="admin-table"><table><thead><tr><th>Started (Bangladesh)</th><th>Status</th><th>Added / updated</th><th>Errors</th></tr></thead><tbody>{data.sync.map(row => <tr><td>{date(row.started_at)}</td><td>{row.status}</td><td>{row.added} / {row.updated}</td><td><details><summary>Details</summary><pre>{row.errors || 'No errors recorded'}</pre></details></td></tr>)}</tbody></table></div>{data.sync.length === 0 && <p class="quiet-empty">No sync runs recorded.</p>}</>}
+    {module === 'settings' && <><p>Enter credentials in secure environment settings. Secret values are never displayed here.</p><div class="admin-settings">{Object.entries(settingsFields).map(([key, label]) => {
+      const setting = settingValue(key);
+      return <form class="admin-form" method="post"><input type="hidden" name="key" value={key} /><input type="hidden" name="revision" value={setting?.revision ?? -1} /><fieldset disabled={!canWrite}><label>{label}<input name="value" value={submitted?.get('key') === key ? submitted.get('value') || '' : setting?.value || (key === 'site_name' ? 'ScreenPeek' : '')} maxlength="250" aria-describedby={`setting-help-${key}`} /></label><small id={`setting-help-${key}`}>{['ads_enabled', 'maintenance', 'ratings_external'].includes(key) ? '0 = off · 1 = on' : key === 'popunder_cap_hours' ? '1–168 hours · default 24' : key === 'sync_max_titles' ? '1–2000; the nightly workflow applies this limit.' : 'Static pages apply changes at the next build.'}</small><button type="submit">Save {label.toLowerCase()}</button></fieldset></form>;
+    })}</div><section class="catalogue-section"><h2>Worker configuration status</h2><dl class="title-facts">{secrets.map(secret => <div><dt>{secret.name}</dt><dd>{secret.set ? 'Set ✓' : 'Not set'}</dd></div>)}</dl><p>Sync-only source and R2 S3 credentials belong in GitHub Actions; their status is not visible to this Worker.</p></section></>}
+    {module==='backup' && <BackupSnapshots />}
+    {module === 'backup' && <section class="empty-state"><h2>Export site configuration</h2><p>The JSON contains ad codes and destinations. Store it privately. It contains configuration and content overrides; it does not contain the full catalogue or R2 objects.</p><a class="button primary" href="?download=1">Download configuration JSON</a><form class="admin-form" method="post" enctype="multipart/form-data"><label>Configuration export<input type="file" name="backup_file" accept="application/json,.json" required /></label><label>Type RESTORE to replace configuration<input name="confirm_restore" required pattern="RESTORE" /></label><p>A private pre-restore snapshot must succeed before any configuration is replaced.</p><button>Restore configuration</button></form></section>}
+    {module === 'pages' && <>
+      <nav class="hub-navigation" aria-label="Information pages">{data.documents.map(document => <a href={`?edit=${document.slug}`}>{document.title}</a>)}</nav>
+      {data.documents.filter(document => document.slug === (Astro.url.searchParams.get('edit') || 'about')).map(document => <section class="catalogue-section"><h2>Edit {document.title}</h2><form class="admin-form" method="post"><input type="hidden" name="slug" value={document.slug} /><input type="hidden" name="revision" value={document.revision} /><fieldset disabled={!canWrite}>
+        <label>Page title *<input name="title" value={submitted?.get('slug') === document.slug ? submitted.get('title') : document.title} maxlength="120" required /></label>
+        <label>Page content (Markdown) *<textarea name="body_md" rows="18" maxlength="20000" required>{submitted?.get('slug') === document.slug ? submitted.get('body_md') : document.body_md}</textarea></label><small>Headings, lists, emphasis and links are supported. Raw HTML and inline images do not render. Keep public contact details current. Static pages update on the next build; required attribution stays visible.</small>
+        <button class="primary" type="submit">Save page</button>
+      </fieldset></form><a href={document.slug === '404' ? '/404/' : `/${document.slug}/`}>Open public page →</a></section>)}
+    </>}
+    {(module === 'links' || module === 'content') && data.pages > 1 && <nav class="pagination" aria-label="Admin pages">{data.page > 1 && <a href={pageLink(data.page - 1)}>Previous</a>}<span>Page {data.page} of {data.pages}</span>{data.page < data.pages && <a href={pageLink(data.page + 1)}>Next</a>}</nav>}
+  </>}
+</Base>

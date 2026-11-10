@@ -1,0 +1,36 @@
+---
+import Base from '../layouts/Base.astro';
+import AdSlot from './AdSlot.astro';
+import PosterCard from './PosterCard.astro';
+import Pagination from './Pagination.astro';
+import { creditLabel } from '../lib/people';
+import type { PersonPageData } from '../lib/people';
+import { mediaUrl } from '../lib/media';
+import { personSchema, siteOrigin } from '../lib/seo';
+import { env } from 'cloudflare:workers';
+interface Props { data: PersonPageData; mediaBase?: string; }
+const { data, mediaBase } = Astro.props;
+const { person } = data;
+const available = data.status === 200 && person !== null;
+const portrait = mediaUrl(person?.profile_r2, mediaBase, 185);
+const biography = person?.bio?.trim() || '';
+const cutoff = biography.length > 480 ? Math.max(biography.lastIndexOf(' ', 480), 350) : biography.length;
+const pageTitle = available ? `${person!.name} — Movies & Shows, Biography${data.page > 1 ? ` — Page ${data.page}` : ''}` : data.status === 503 ? 'Person unavailable' : 'Person not found';
+const initials = person?.name.split(/\s+/).slice(0, 2).map(part => part[0]).join('') || '';
+---
+<Base title={pageTitle} description={available && biography ? biography.slice(0, 155) : undefined}
+  sample={data.sample} noindex={data.noindex} pageType={available ? 'cast' : 'utility'} pageNumber={data.page} schemas={personSchema(data, siteOrigin(env.SITE_URL), mediaBase)} ogImage={available ? portrait : null} ogType={available ? 'profile' : 'website'}>
+  {!available || !person ? <section class="empty-state"><p class="eyebrow">{data.status === 503 ? 'CATALOGUE' : '404 · NOT FOUND'}</p><h1>{data.status === 503 ? 'This biography is temporarily unavailable.' : 'This person or page could not be found.'}</h1><p>{data.status === 503 ? 'Please try again shortly.' : 'Explore a movie or series to discover its cast and crew.'}</p><a class="button primary" href="/">Go home</a></section> : <article data-person-page>
+    <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a><span aria-hidden="true">/</span><span>Cast & crew</span><span aria-hidden="true">/</span><span aria-current="page">{person.name}</span></nav>
+    <header class="person-hero"><div class="person-portrait">{portrait ? <img src={portrait} width="185" height="278" loading="eager" fetchpriority="high" decoding="async" alt={`${person.name} portrait`} /> :
+      <div class="person-placeholder" role="img" aria-label={`${person.name} portrait unavailable`}><span aria-hidden="true">{initials}</span><small>Portrait unavailable</small></div>}</div>
+      <div class="person-heading"><p class="eyebrow">CAST & CREW</p><h1>{person.name}</h1><p>{data.total.toLocaleString('en')} {data.total === 1 ? 'title' : 'titles'} in the catalogue</p></div>
+    </header>
+    <section class="catalogue-section storyline" aria-labelledby="biography-title"><h2 id="biography-title">Biography</h2>{biography ? <><p>{biography.slice(0, cutoff)}</p>{cutoff < biography.length && <details><summary>Read more</summary><p>{biography.slice(cutoff).trim()}</p></details>}</> : <p>A biography is not available yet.</p>}</section>
+    <AdSlot pageType="cast" placement="top_300x250" />
+    <section class="catalogue-section" aria-labelledby="filmography-title"><div class="section-heading"><h2 id="filmography-title">Filmography</h2><span class="section-more">Page {data.page} of {data.pages}</span></div>
+      {data.titles.length > 0 ? <div class="poster-grid" data-filmography-grid>{data.titles.map(title => <PosterCard title={title} mediaBase={mediaBase} annotation={creditLabel(title)} />)}<div class="grid-ad"><AdSlot pageType="cast" placement="native" /></div></div> : <><p class="quiet-empty">No titles are listed in the catalogue yet.</p><AdSlot pageType="cast" placement="native" /></>}
+      <Pagination page={data.page} pages={data.pages} url={Astro.url} />
+    </section>
+  </article>}
+</Base>

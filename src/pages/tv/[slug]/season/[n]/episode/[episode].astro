@@ -1,0 +1,9 @@
+---
+import { env } from 'cloudflare:workers';
+import EpisodePage from '../../../../../../components/EpisodePage.astro';
+import { loadEpisodePage } from '../../../../../../lib/seasons';
+const data = await loadEpisodePage(env.DB, Astro.params.slug || '', Astro.params.n || '', Astro.params.episode || '');
+Astro.response.status = data.status;
+Astro.response.headers.set('Cache-Control', data.cacheControl);
+---
+<EpisodePage data={data} mediaBase={env.R2_PUBLIC_BASE} />

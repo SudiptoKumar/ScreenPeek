@@ -1,0 +1,95 @@
+---
+import '../styles/site.css';
+import AdSlot from '../components/AdSlot.astro';
+import Popunder from '../components/Popunder.astro';
+import { env } from 'cloudflare:workers';
+import { siteConfig } from '../lib/site-config';
+import { mediaUrl } from '../lib/media';
+import { breadcrumbs, canonicalUrl, filteredUrl, productionSeo, schemaJson, siteOrigin } from '../lib/seo';
+import type { Schema } from '../lib/seo';
+interface Props {
+  title: string; description?: string; noindex?: boolean; sample?: boolean;
+  pageType?: 'home' | 'list' | 'detail' | 'cast' | 'watch' | 'trailer' | 'search' | 'utility';
+  pageNumber?: number; schemas?: Schema[]; ogImage?: string | null; ogType?: string;
+}
+const { title, description = 'Discover movies and TV shows, cast, trailers and legal ways to watch.',
+  noindex = false, sample = false, pageType = 'utility', pageNumber = 1, schemas = [], ogImage, ogType = 'website' } = Astro.props;
+const site = await siteConfig(Astro.locals, env);
+const logo = mediaUrl(site.logo, env.R2_PUBLIC_BASE);
+const canonical = canonicalUrl(Astro.url, siteOrigin(env.SITE_URL), pageNumber);
+let override: { title: string | null; noindex: number } | null = null;
+try { override = await env.DB.prepare('SELECT title,noindex FROM seo_overrides WHERE path=? AND deleted_at IS NULL').bind(Astro.url.pathname).first(); } catch { /* Default metadata remains available. */ }
+const indexBlocked = noindex || sample || filteredUrl(Astro.url) || !productionSeo(env) || override?.noindex === 1;
+const fullTitle = override?.title?.trim() || `${title} | ${site.name}`;
+const summary = description.trim().slice(0, 155);
+const structured = [...schemas];
+if (pageType !== 'utility' && Astro.url.pathname !== '/' && !structured.some(schema => schema['@type'] === 'BreadcrumbList')) structured.push(breadcrumbs([{ name: 'Home', path: '/' }, { name: title, path: Astro.url.pathname }], siteOrigin(env.SITE_URL)));
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content={summary} />
+    {site.google && <meta name="google-site-verification" content={site.google} />}
+    {site.bing && <meta name="msvalidate.01" content={site.bing} />}
+    <meta name="theme-color" content="#0B0B10" />
+    {indexBlocked && <meta name="robots" content="noindex,follow" />}
+    <title>{fullTitle}</title>
+    <link rel="canonical" href={canonical} />
+    <meta property="og:title" content={fullTitle} /><meta property="og:description" content={summary} />
+    <meta property="og:url" content={canonical} /><meta property="og:type" content={ogType} /><meta property="og:site_name" content={site.name} /><meta property="og:locale" content="en_US" />
+    <meta name="twitter:card" content={pageType === 'detail' ? 'summary_large_image' : 'summary'} /><meta name="twitter:title" content={fullTitle} /><meta name="twitter:description" content={summary} />
+    {ogImage && <><meta property="og:image" content={ogImage} /><meta name="twitter:image" content={ogImage} /></>}
+    {ogImage && new URL(ogImage).pathname.startsWith('/og/') && <><meta property="og:image:width" content="1200" /><meta property="og:image:height" content="630" /><meta property="og:image:type" content="image/webp" /></>}
+    {structured.length > 0 && <script type="application/ld+json" is:inline set:html={schemaJson(structured)}></script>}
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body data-page-type={pageType}>
+    <a class="skip" href="#content">Skip to content</a>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label={`${site.name} home`}>{logo ? <img src={logo} width="128" height="32" alt={site.name} /> : site.name === 'ScreenPeek' ? <>Screen<span>Peek</span></> : site.name}</a>
+      <nav class="desktop-nav" aria-label="Main navigation">
+        <a href="/movies/">Movies</a><a href="/series/">Series</a>
+        <a href="/top10/">Top 10</a><a href="/upcoming/">Upcoming</a><a href="/mylist/">My List</a>
+      </nav>
+      <form class="header-search" action="/search/" role="search" autocomplete="off"><label class="sr-only" for="search">Search titles</label>
+        <input id="search" name="q" type="search" placeholder="Search movies & shows" maxlength="100" autocomplete="off" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-controls="search-suggestions" aria-expanded="false" />
+        <div class="search-panel" data-search-panel hidden>
+          <ul id="search-suggestions" class="search-suggestions" role="listbox" aria-label="Title suggestions"></ul>
+          <p class="search-status" data-search-status role="status" aria-live="polite"></p>
+          <a class="search-all" data-search-all href="/search/">See all results →</a>
+        </div>
+      </form>
+      <details class="mobile-menu"><summary aria-label="Open navigation">Menu</summary>
+        <nav aria-label="Mobile navigation"><a href="/movies/">Movies</a><a href="/series/">Series</a><a href="/top10/">Top 10</a><a href="/upcoming/">Upcoming</a><a href="/mylist/">My List</a></nav>
+      </details>
+    </header>
+    <main id="content">
+      {sample && <p class="notice sample-notice"><strong>Sample catalogue</strong> · These titles are synthetic development data. Remove the sample seed before live imports.</p>}
+      <slot />
+      <p class="sr-only" data-library-status role="status" aria-live="polite"></p>
+    </main>
+    <footer class="site-footer">
+      <nav aria-label="Information"><a href="/about/">About</a><a href="/privacy/">Privacy</a><a href="/dmca/">DMCA</a><a href="/contact/">Contact</a></nav>
+      {site.socials.length > 0 && <nav aria-label="Social links">{site.socials.map(link => <a href={`/go/${link.slug}/`} rel="sponsored nofollow noopener" target="_blank" data-no-popunder>{link.name}</a>)}</nav>}
+      {site.tagline && <p>{site.tagline}</p>}
+      <p><img src="/tmdb.svg" width="48" height="48" alt="TMDB" loading="lazy" decoding="async" />
+        This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
+      <p>{site.name} provides movie and TV information. No videos are hosted here.</p>
+    </footer>
+    {pageType !== 'utility' && <><AdSlot pageType={pageType} placement="sticky_320x50" /><AdSlot pageType="global" placement="social_bar" /></>}
+    {pageType === 'detail' && <Popunder />}
+    <script>
+      import '../scripts/search';
+      import '../scripts/library';
+    </script>
+
+<noscript><style>img[data-lazy-src]{display:none}</style></noscript>
+<script is:inline>
+{const load=i=>{i.src=i.dataset.lazySrc;delete i.dataset.lazySrc};const images=document.querySelectorAll('img[data-lazy-src]');if('IntersectionObserver'in window){const observer=new IntersectionObserver(entries=>entries.forEach(entry=>{if(entry.isIntersecting){load(entry.target);observer.unobserve(entry.target)}}));images.forEach(image=>observer.observe(image))}else images.forEach(load)}
+</script>
+
+    {['home', 'list', 'detail'].includes(pageType) && <script type="speculationrules" is:inline>{"prefetch":[{"source":"document","where":{"selector_matches":"a[data-poster-card]"},"eagerness":"conservative"}]}</script>}
+  </body>
+</html>

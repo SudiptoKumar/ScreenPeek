@@ -1,0 +1,49 @@
+---
+import Base from '../layouts/Base.astro';
+import AdSlot from './AdSlot.astro';
+import PosterCard from './PosterCard.astro';
+import Pagination from './Pagination.astro';
+import type { HubKind, HubPageData } from '../lib/hubs';
+import { titleUrl } from '../lib/catalogue';
+import type { TitleCard } from '../lib/catalogue';
+import { rating } from '../lib/format';
+import { itemListSchema, siteOrigin } from '../lib/seo';
+import { env } from 'cloudflare:workers';
+interface Props { data: HubPageData; mediaBase?: string; }
+const { data, mediaBase } = Astro.props;
+const available = data.status === 200;
+const labels: Record<HubKind, string> = { genre: 'GENRE', collection: 'COLLECTION', language: 'LANGUAGE', new: 'NEW IN THE CATALOGUE', top10: 'THE MOST POPULAR', upcoming: 'COMING NEXT' };
+const intros: Record<HubKind, string> = {
+  genre: `Browse ${data.name.toLowerCase()} movies and TV series, with cast, trailers and legal ways to watch.`,
+  collection: `Explore the ${data.name} collection and find details for every title.`,
+  language: `${data.name} movies and TV series from the catalogue.`,
+  new: 'The most recent additions to the catalogue, with movie and TV details.',
+  top10: 'Discover popular movies and series, ranked by catalogue popularity.',
+  upcoming: 'Upcoming movies and TV series, ordered by release date.',
+};
+const intro = data.intro || intros[data.kind];
+const monthFormatter = new Intl.DateTimeFormat('en', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+const months = new Map<string, { key: string; label: string; titles: TitleCard[] }>();
+if (data.kind === 'upcoming') for (const title of data.catalogue.titles) {
+  const date = title.release_date && Number.isFinite(Date.parse(title.release_date)) ? new Date(title.release_date) : null;
+  const key = date ? `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}` : 'tba';
+  if (!months.has(key)) months.set(key, { key, label: date ? monthFormatter.format(date) : 'Date to be announced', titles: [] });
+  months.get(key)!.titles.push(title);
+}
+const grouped = [...months.values()];
+---
+<Base title={data.title} description={available ? intro.slice(0, 155) : undefined}
+  sample={data.sample} noindex={data.noindex} pageType={available ? 'list' : 'utility'} pageNumber={data.catalogue.page} schemas={available ? [itemListSchema(data.catalogue.titles, siteOrigin(env.SITE_URL), data.catalogue.page)] : []}>
+  {!available ? <section class="empty-state"><p class="eyebrow">{data.status === 503 ? 'CATALOGUE' : '404 · NOT FOUND'}</p><h1>{data.status === 503 ? 'The catalogue is temporarily unavailable.' : 'This collection or page could not be found.'}</h1><p>{data.status === 503 ? 'Please try again shortly.' : 'Explore the catalogue to find another movie or series.'}</p><a class="button primary" href="/">Go home</a></section> : <article data-hub-page={data.kind}>
+    <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a><span aria-hidden="true">/</span><span aria-current="page">{data.name}</span></nav>
+    <header class="page-heading hub-heading"><p class="eyebrow">{labels[data.kind]}</p><h1>{data.name}</h1><p>{intro}</p></header>
+    <nav class="hub-navigation" aria-label="Catalogue sections"><a href="/new/" aria-current={data.kind === 'new' ? 'page' : undefined}>New arrivals</a><a href="/top10/" aria-current={data.kind === 'top10' ? 'page' : undefined}>Top 10</a><a href="/upcoming/" aria-current={data.kind === 'upcoming' ? 'page' : undefined}>Upcoming</a></nav>
+    <div class="results-heading"><p><strong>{data.catalogue.total.toLocaleString('en')}</strong> {data.catalogue.total === 1 ? 'title' : 'titles'}</p><p>Page {data.catalogue.page} of {data.catalogue.pages}</p></div>
+    {data.catalogue.titles.length === 0 ? <section class="empty-state"><h2>No titles are listed here yet.</h2><p>Explore movies and series while the catalogue grows.</p><a class="button" href="/movies/">Browse movies</a><a class="button" href="/series/">Browse series</a></section> : data.kind === 'top10' ? <>
+      <ol class="ranked-list hub-ranking">{data.catalogue.titles.slice(0, 10).map((title, index) => <li data-ranked-title><a href={titleUrl(title)}><span class="rank-number" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span><span class="rank-title"><strong>{title.title}</strong><small>{title.year ?? 'Year TBA'} · {title.type === 'movie' ? 'Movie' : 'TV series'}</small></span><span class="rank-score"><small>TMDb</small><strong>{rating(title.vote_average)}</strong></span></a></li>)}</ol>
+      <AdSlot pageType="list" placement="native" />
+    </> : data.kind === 'upcoming' ? grouped.map((group, groupIndex) => <section class="release-month" aria-labelledby={`month-${group.key}`} data-release-month={group.key}><h2 id={`month-${group.key}`}>{group.label}</h2><div class="poster-grid" data-catalogue-grid>{group.titles.map((title, index) => <><PosterCard title={title} mediaBase={mediaBase} eager={groupIndex === 0 && index < 3} />{index + grouped.slice(0, groupIndex).reduce((count, previous) => count + previous.titles.length, 0) === 11 && data.catalogue.titles.length > 12 && <div class="grid-infeed"><AdSlot pageType="list" placement="infeed" /></div>}</>)}{groupIndex === 0 && <div class="grid-ad"><AdSlot pageType="list" placement="native" /></div>}</div></section>) :
+      <div class="poster-grid" data-catalogue-grid>{data.catalogue.titles.map((title, index) => <><PosterCard title={title} mediaBase={mediaBase} eager={index < 3} />{index === 11 && data.catalogue.titles.length > 12 && <div class="grid-infeed"><AdSlot pageType="list" placement="infeed" /></div>}</>)}<div class="grid-ad"><AdSlot pageType="list" placement="native" /></div></div>}
+    <Pagination page={data.catalogue.page} pages={data.catalogue.pages} url={Astro.url} />
+  </article>}
+</Base>

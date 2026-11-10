@@ -1,0 +1,6 @@
+---
+import { env } from 'cloudflare:workers';
+let snapshots:Array<{key:string;size:number;uploaded:Date}>=[],failed=false;
+try{if(env.BACKUPS)snapshots=(await env.BACKUPS.list({prefix:'backups/',limit:1000})).objects.sort((a,b)=>b.uploaded.getTime()-a.uploaded.getTime()).slice(0,14);else failed=true;}catch{failed=true;}
+---
+<section class="catalogue-section"><h2>Private backup snapshots</h2>{failed?<p>Private backup storage is unavailable. Complete deployment setup before relying on scheduled backups.</p>:snapshots.length?<ul>{snapshots.map(row=><li><a href={`?snapshot=${encodeURIComponent(row.key)}`}>{row.key}</a> · {row.size.toLocaleString()} bytes · {row.uploaded.toISOString()}</li>)}</ul>:<p>No snapshots recorded in this private binding.</p>}<p>Daily backup execution remains governed by the repository enable switch. Store downloaded archives privately.</p></section>

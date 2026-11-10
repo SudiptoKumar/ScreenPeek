@@ -1,0 +1,46 @@
+---
+import Base from '../layouts/Base.astro';
+import AdSlot from './AdSlot.astro';
+import Pagination from './Pagination.astro';
+import { episodePath } from '../lib/seasons';
+import type { SeasonPageData } from '../lib/seasons';
+import { mediaUrl } from '../lib/media';
+import { seasonSchema, siteOrigin } from '../lib/seo';
+import { env } from 'cloudflare:workers';
+interface Props { data: SeasonPageData; mediaBase?: string; }
+const { data, mediaBase } = Astro.props;
+const { title, season } = data;
+const available = data.status === 200 && title !== null && season !== null;
+const seasonName = season?.name || `Season ${season?.season_number ?? ''}`;
+const seriesUrl = `/tv/${encodeURIComponent(title?.slug || '')}/`;
+const pageTitle = available ? `${title!.title} Season ${season!.season_number} — Episodes, Air Dates & Cast${data.page > 1 ? ` — Page ${data.page}` : ''}` :
+  data.status === 410 ? 'Series removed' : data.status === 503 ? 'Season unavailable' : 'Season not found';
+const errorHeading = data.status === 410 ? 'This series has been removed.' : data.status === 503 ? 'Season details are temporarily unavailable.' : 'That season or page could not be found.';
+const formatter = new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeZone: 'UTC' });
+const formatDate = (value: string | null) => value && Number.isFinite(Date.parse(value)) ? formatter.format(new Date(value)) : null;
+---
+<Base title={pageTitle} description={available ? `Browse ${seasonName} episodes of ${title!.title}, with overviews and air dates.` : undefined}
+  sample={data.sample} noindex={data.noindex} pageType={available ? 'list' : 'utility'} pageNumber={data.page} schemas={seasonSchema(data, siteOrigin(env.SITE_URL))}>
+  {!available || !title || !season ? <section class="empty-state"><p class="eyebrow">{data.status === 503 ? 'CATALOGUE' : `${data.status} · ${data.status === 410 ? 'REMOVED' : 'NOT FOUND'}`}</p><h1>{errorHeading}</h1><p>{data.status === 503 ? 'Please try again shortly.' : 'Explore the catalogue to find another series.'}</p><a class="button primary" href="/">Go home</a></section> : <article data-season-page>
+    <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a><span aria-hidden="true">/</span><a href="/series/">Series</a><span aria-hidden="true">/</span><a href={seriesUrl}>{title.title}</a><span aria-hidden="true">/</span><span aria-current="page">{seasonName}</span></nav>
+    <header class="page-heading season-heading"><p class="eyebrow">SEASON {season.season_number}</p><h1>{title.title} — {seasonName}</h1><p>{data.total} {data.total === 1 ? 'episode' : 'episodes'} listed{formatDate(season.air_date) && ` · First aired ${formatDate(season.air_date)}`}</p></header>
+    <div class="detail-actions season-actions"><a class="button primary" href={`/watch/${encodeURIComponent(title.slug)}/`}>Where to Watch →</a><a class="button" href={seriesUrl}>Series details</a><a class="button" href={`/trailer/${encodeURIComponent(title.slug)}/`}>Series trailer</a></div>
+    <div class="results-heading"><p><strong>{data.total}</strong> {data.total === 1 ? 'episode' : 'episodes'}</p><p>Page {data.page} of {data.pages}</p></div>
+    {data.episodes.length > 0 ? <div class="episode-list">{data.episodes.map((episode, index) => {
+      const href = episodePath(title.slug, season.season_number, episode.episode_number);
+      const still = mediaUrl(episode.still_r2, mediaBase, 185);
+      const airDate = formatDate(episode.air_date);
+      const overview = episode.overview?.trim() || '';
+      return <><article class="episode-row" data-episode-row>
+        <a class="episode-still" href={href} aria-label={`Episode ${episode.episode_number}: ${episode.name || 'Episode details'}`}>
+          {still ? <img src={still} width="185" height="104" alt={`${episode.name || `Episode ${episode.episode_number}`} still`} loading={index === 0 ? 'eager' : 'lazy'} fetchpriority={index === 0 ? 'high' : 'auto'} decoding="async" /> : <span class="episode-still-empty">Still unavailable</span>}
+        </a>
+        <header class="episode-row-heading"><p class="eyebrow">EPISODE {String(episode.episode_number).padStart(2, '0')}</p><h2><a href={href}>{episode.name || `Episode ${episode.episode_number}`}</a></h2><p class="episode-air-date">{airDate ? <time datetime={episode.air_date!}>{airDate}</time> : 'Air date to be announced'}</p></header>
+        <p class="episode-summary">{overview ? `${overview.slice(0, 240)}${overview.length > 240 ? '…' : ''}` : 'An overview is not available yet.'}</p>
+      </article>{index === 1 && <div class="episode-list-ad"><AdSlot pageType="list" placement="native" /></div>}</>;
+    })}</div> : <section class="empty-state"><h2>Episode details are not available yet.</h2><p>Return to the series for its cast, storyline and watch options.</p><a class="button" href={seriesUrl}>Series details</a></section>}
+    {data.episodes.length < 2 && <AdSlot pageType="list" placement="native" />}
+    <Pagination page={data.page} pages={data.pages} url={Astro.url} />
+    <p class="episode-back"><a href={seriesUrl}>← Back to {title.title}</a></p>
+  </article>}
+</Base>

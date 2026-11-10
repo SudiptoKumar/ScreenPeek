@@ -1,0 +1,9 @@
+---
+import { env } from 'cloudflare:workers';
+import PersonPage from '../../components/PersonPage.astro';
+import { loadPersonPage } from '../../lib/people';
+const data = await loadPersonPage(env.DB, Astro.params.slug || '', Astro.url.searchParams.get('page') || '1');
+Astro.response.status = data.status;
+Astro.response.headers.set('Cache-Control', data.cacheControl);
+---
+<PersonPage data={data} mediaBase={env.R2_PUBLIC_BASE} />

@@ -1,0 +1,9 @@
+---
+import { env } from 'cloudflare:workers';
+import TitleDetail from '../../components/TitleDetail.astro';
+import { loadTitlePage } from '../../lib/detail';
+const data = await loadTitlePage(env.DB, Astro.params.slug || '', 'movie');
+Astro.response.status = data.status;
+Astro.response.headers.set('Cache-Control', data.cacheControl);
+---
+<TitleDetail data={data} mediaBase={env.R2_PUBLIC_BASE} />

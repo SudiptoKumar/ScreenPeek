@@ -1,0 +1,10 @@
+---
+import { env } from 'cloudflare:workers';
+import TrustPage from '../components/TrustPage.astro';
+import { loadTrustPage, trustSlugs } from '../lib/trust';
+const slug = Astro.params.page || '';
+const data = await loadTrustPage(env.DB, (trustSlugs as readonly string[]).includes(slug) && slug !== '404' ? slug : '404');
+Astro.response.status = data.status;
+Astro.response.headers.set('Cache-Control', data.cacheControl);
+---
+<TrustPage data={data} />

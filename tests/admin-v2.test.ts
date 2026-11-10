@@ -1,0 +1,44 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { resolve } from 'node:path';
+import { localBindings, applyLocalSql } from '../sync/local.ts';
+import { applyAdminAction } from '../src/lib/admin/actions.ts';
+import { advancedAction, undoChange } from '../src/lib/admin/advanced.ts';
+import { createAdResolver } from '../src/lib/ads.ts';
+import type { AdminIdentity } from '../src/lib/admin/access.ts';
+test('native v2 Undo mirrors original code, rejects stale/unauthorized changes and SEO loops; format kill switch applies', async () => {
+  const state = await mkdtemp(resolve(tmpdir(), 'screenpeek-admin-v2-')); const local = await localBindings(state);
+  const env = { DB: local.database as unknown as D1Database, CONFIG: local.config as unknown as KVNamespace, CLOUDFLARE_ZONE_ID: 'a'.repeat(32), CLOUDFLARE_API_TOKEN: 'fixture-only', ADS_ENABLED: '1' };
+  const owner: AdminIdentity = { email: 'owner@example.test', role: 'owner', modules: {} };
+  let purges = 0; const fetcher = (async () => { purges++; return Response.json({ success: true }); }) as typeof fetch;
+  try {
+    await applyLocalSql(local.database, await readFile('db/schema.sql', 'utf8'));
+    for (const file of (await readdir('db/migrations')).filter(name => name.endsWith('.sql')).sort()) await applyLocalSql(local.database, await readFile(`db/migrations/${file}`, 'utf8'));
+    const ad = (code: string, revision: string) => new URLSearchParams({ page_type: 'detail', placement: 'native', code, revision, enabled: '1' });
+    await applyAdminAction(env, owner, 'ads', ad('<div>Old code</div>', '-1'), fetcher);
+    await applyAdminAction(env, owner, 'ads', ad('<div>New code</div>', '0'), fetcher);
+    const log = (await local.db.query('SELECT id FROM admin_log ORDER BY id DESC LIMIT 1'))[0];
+    await assert.rejects(undoChange(env, { ...owner, role: 'viewer' }, Number(log.id), fetcher), /role/);
+    await assert.rejects(undoChange(env, { ...owner, role: 'editor' }, Number(log.id), fetcher), /role/);
+    await undoChange(env, owner, Number(log.id), fetcher);
+    assert.equal((await env.CONFIG.get<{ code: string }>('ad:detail:native', 'json'))?.code, '<div>Old code</div>');
+    await assert.rejects(undoChange(env, owner, Number(log.id), fetcher), /changed after/);
+    assert.ok(purges >= 3);
+    await applyAdminAction(env, owner, 'settings', new URLSearchParams({ key: 'ads_enabled', value: '1', revision: '0' }), fetcher);
+    assert.ok(await createAdResolver(env).resolve('detail', 'native'));
+    await applyAdminAction(env, owner, 'ads', new URLSearchParams({ key: 'ads_native_enabled', value: '0', revision: '0' }), fetcher);
+    assert.equal(await createAdResolver(env).resolve('detail', 'native'), null);
+    await advancedAction(env, owner, 'seo', new URLSearchParams({ action: 'save-redirect', from_path: '/old/', to_target: '/new/' }), fetcher);
+    await assert.rejects(advancedAction(env, owner, 'seo', new URLSearchParams({ action: 'save-redirect', from_path: '/new/', to_target: '/old/' }), fetcher), /loop/);
+    await advancedAction(env, { ...owner, role: 'editor' }, 'seo', new URLSearchParams({ action: 'save-verification', key: 'google_site_verification', value: 'fixture-code' }), fetcher);
+    assert.equal(await env.CONFIG.get('config:google_site_verification'), 'fixture-code');
+    await local.db.batch([{ sql: "INSERT INTO titles(id,type,slug,title) VALUES(1,'movie','one','One')" }, { sql: "INSERT INTO genres(slug,name,title_count) VALUES('drama','Drama',1)" }, { sql: "INSERT INTO title_genres(title_id,title_type,genre_slug) VALUES(1,'movie','drama')" }]);
+    await applyAdminAction(env, owner, 'content', new URLSearchParams({ id: '1', type: 'movie', hidden: '1', revision: '0' }), fetcher);
+    const visibilityLog = (await local.db.query("SELECT id FROM admin_log WHERE entity='content' ORDER BY id DESC LIMIT 1"))[0];
+    await undoChange(env, owner, Number(visibilityLog.id), fetcher);
+    assert.equal((await local.db.query("SELECT title_count FROM genres WHERE slug='drama'"))[0].title_count, 1);
+    const history = await local.db.query('SELECT actor,entity FROM admin_log'); assert.ok(history.every(row => row.actor === owner.email));
+  } finally { await local.dispose(); await rm(state, { recursive: true, force: true }); }
+});

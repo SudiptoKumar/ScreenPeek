@@ -1,0 +1,1 @@
+ALTER TABLE admin_delivery ADD COLUMN kv_cursor INTEGER NOT NULL DEFAULT 0;

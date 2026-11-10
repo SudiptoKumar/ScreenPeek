@@ -1,0 +1,26 @@
+---
+import { env } from 'cloudflare:workers';
+import CatalogueList from '../components/CatalogueList.astro';
+import HubPage from '../components/HubPage.astro';
+import TrustPage from '../components/TrustPage.astro';
+import { loadTrustPage } from '../lib/trust';
+import { loadCataloguePage } from '../lib/catalogue-page';
+import { loadHubPage } from '../lib/hubs';
+import type { HubKind } from '../lib/hubs';
+import { listingBase, paginationLink } from '../lib/listing-path';
+const base = listingBase(Astro.url.pathname);
+const parts = base?.split('/').filter(Boolean) || [];
+const valid = base && base !== Astro.url.pathname;
+const filtered = ['genre', 'year', 'rating', 'sort'].some(key => Astro.url.searchParams.has(key));
+if (valid && Astro.url.pathname.endsWith('/filter/') && !filtered) {
+  const number = Number(Astro.url.searchParams.get('page') || 1);
+  return Astro.redirect(paginationLink(new URL(base, Astro.url), Number.isSafeInteger(number) && number > 0 ? number : 1), 301);
+}
+if (valid && Astro.url.pathname.endsWith('/page/1/')) return Astro.redirect(base, 301);
+const catalogue = valid && ['movies', 'series'].includes(parts[0]) ? await loadCataloguePage(env.DB, Astro.url, parts[0] === 'movies' ? 'movie' : 'tv') : null;
+const hub = valid && !catalogue ? await loadHubPage(env.DB, parts[0] as HubKind, Astro.url, parts[1]) : null;
+const missing = !valid ? await loadTrustPage(env.DB, '404') : null;
+Astro.response.status = catalogue?.status || hub?.status || 404;
+Astro.response.headers.set('Cache-Control', catalogue?.cacheControl || hub?.cacheControl || 'no-store');
+---
+{catalogue ? <CatalogueList data={catalogue} mediaBase={env.R2_PUBLIC_BASE} /> : hub ? <HubPage data={hub} mediaBase={env.R2_PUBLIC_BASE} /> : missing && <TrustPage data={missing} />}

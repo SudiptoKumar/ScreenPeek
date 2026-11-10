@@ -1,0 +1,14 @@
+---
+import { paginationLink } from '../../lib/listing-path';
+import Base from '../../layouts/Base.astro';
+if (['movie', 'tv'].includes(Astro.params.type || '')) {
+  const url = new URL(Astro.url); url.pathname = Astro.params.type === 'movie' ? '/movies/' : '/series/';
+  const page = Number(url.searchParams.get('page') || 1);
+  return Astro.redirect(paginationLink(url, Number.isSafeInteger(page) && page > 0 ? page : 1), 301);
+}
+Astro.response.status = 404;
+Astro.response.headers.set('Cache-Control', 'no-store');
+---
+<Base title="Page not found" noindex pageType="utility">
+  <section class="empty-state"><p class="eyebrow">404 · PAGE NOT FOUND</p><h1>That catalogue type could not be found.</h1><a class="button primary" href="/">Go home</a></section>
+</Base>

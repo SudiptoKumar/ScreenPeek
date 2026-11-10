@@ -1,0 +1,12 @@
+---
+import type { ProviderRow } from '../lib/watch';
+import { mediaUrl } from '../lib/media';
+interface Props { provider: ProviderRow; mediaBase?: string; }
+const { provider, mediaBase } = Astro.props;
+const Tag = provider.href ? 'a' : 'div';
+const logo = mediaUrl(provider.logo_r2, mediaBase);
+---
+<Tag class="provider-row" href={provider.href || undefined} rel={provider.href ? 'sponsored nofollow noopener' : undefined} target={provider.href ? '_blank' : undefined} data-no-popunder>
+  {logo && <img src={logo} width="32" height="32" loading="lazy" decoding="async" alt="" />}
+  <strong>{provider.provider_name}</strong><span>{provider.href ? 'Visit provider ↗' : 'Provider listed'}</span>
+</Tag>

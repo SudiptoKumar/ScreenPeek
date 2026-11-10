@@ -1,0 +1,9 @@
+---
+import { env } from 'cloudflare:workers';
+import SearchPage from '../../components/SearchPage.astro';
+import { loadSearchPage } from '../../lib/search';
+const data = await loadSearchPage(env.DB, Astro.url);
+Astro.response.status = data.status;
+Astro.response.headers.set('Cache-Control', data.cacheControl);
+---
+<SearchPage data={data} mediaBase={env.R2_PUBLIC_BASE} />

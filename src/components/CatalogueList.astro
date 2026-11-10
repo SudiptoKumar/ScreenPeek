@@ -1,0 +1,39 @@
+---
+import { listingBase } from '../lib/listing-path';
+import Base from '../layouts/Base.astro';
+import PosterCard from './PosterCard.astro';
+import Pagination from './Pagination.astro';
+import AdSlot from './AdSlot.astro';
+import type { CataloguePageData } from '../lib/catalogue-page';
+import { itemListSchema, siteOrigin } from '../lib/seo';
+import { env } from 'cloudflare:workers';
+interface Props { data: CataloguePageData; mediaBase?: string; }
+const { data, mediaBase } = Astro.props;
+const base = listingBase(Astro.url.pathname) || Astro.url.pathname;
+const { type, label, filters, catalogue, options, sample, failed, missing, filtered, pageTitle } = data;
+---
+<Base title={pageTitle} description={`Browse ${type === 'movie' ? 'movies' : 'TV series'} by genre, year and TMDb rating. Find cast, trailers and legal ways to watch.`}
+  sample={sample} noindex={sample || filtered || failed || missing} pageType={failed || missing ? 'utility' : 'list'} pageNumber={catalogue.page} schemas={failed || missing ? [] : [itemListSchema(catalogue.titles, siteOrigin(env.SITE_URL), catalogue.page)]}>
+  {failed ? <section class="empty-state"><p class="eyebrow">CATALOGUE</p><h1>The catalogue is temporarily unavailable.</h1><p>Please try again shortly.</p><a class="button" href="/">Go home</a></section> : missing ?
+    <section class="empty-state"><p class="eyebrow">404 · PAGE NOT FOUND</p><h1>That page is beyond the catalogue.</h1><p>There {catalogue.pages === 1 ? 'is 1 page' : `are ${catalogue.pages} pages`} of matching titles.</p><a class="button primary" href={base}>Back to {label.toLowerCase()}</a></section> : <>
+    <header class="page-heading"><a class="back-link" href="/">← Home</a><h1>{label}</h1><p>Find a story that fits. Filter the catalogue below.</p></header>
+    <form class="catalogue-filters" action={`${base}filter/`} method="get" aria-label="Catalogue filters">
+      <label for="filter-genre">Genre<select id="filter-genre" name="genre"><option value="">All genres</option>{options.genres.map(genre => <option value={genre.slug} selected={filters.genre === genre.slug}>{genre.name}</option>)}</select></label>
+      <label for="filter-year">Year<select id="filter-year" name="year"><option value="">Any year</option>{options.years.map(year => <option value={year} selected={filters.year === year}>{year}</option>)}</select></label>
+      <label for="filter-rating">TMDb rating<select id="filter-rating" name="rating"><option value="">Any rating</option>{[6, 7, 8, 9].map(value => <option value={value} selected={filters.minRating === value}>{value}+</option>)}</select></label>
+      <label for="filter-sort">Sort by<select id="filter-sort" name="sort">
+        <option value="popular" selected={filters.sort === 'popular'}>Popular</option><option value="newest" selected={filters.sort === 'newest'}>Recently added</option>
+        <option value="rating" selected={filters.sort === 'rating'}>Highest rated</option><option value="release" selected={filters.sort === 'release'}>Release date</option>
+      </select></label>
+      <div class="filter-actions"><button class="primary" type="submit">Apply filters</button><a href={base}>Clear</a></div>
+    </form>
+    <div class="results-heading"><p><strong>{catalogue.total.toLocaleString('en')}</strong> {type === 'movie' ? 'movies' : 'series'}</p><p>Page {catalogue.page} of {catalogue.pages}</p></div>
+    {catalogue.titles.length ? <>
+      <div class="poster-grid" data-catalogue-grid>
+        {catalogue.titles.map((title, index) => <><PosterCard title={title} mediaBase={mediaBase} eager={index < 3} />{index === 11 && catalogue.titles.length > 12 && <div class="grid-infeed"><AdSlot pageType="list" placement="infeed" /></div>}</>)}
+        <div class="grid-ad"><AdSlot pageType="list" placement="native" /></div>
+      </div>
+      <Pagination page={catalogue.page} pages={catalogue.pages} url={Astro.url} />
+    </> : <section class="empty-state"><h2>No matching titles yet.</h2><p>Try another genre, year or rating.</p><a class="button" href={base}>Clear filters</a></section>}
+  </>}
+</Base>

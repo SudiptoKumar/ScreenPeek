@@ -1,0 +1,12 @@
+---
+import Base from '../../layouts/Base.astro';
+import { env } from 'cloudflare:workers';
+Astro.response.headers.set('Cache-Control', 'no-store');
+---
+<Base title="My List & viewing history" noindex pageType="utility">
+  <section class="intro"><p class="eyebrow">YOUR BROWSER</p><h1>My List</h1><p>Saved titles and viewing history stay on this browser. No account is needed. Clearing site data removes them.</p><a class="button" href="/">Browse trending →</a></section>
+  <div data-library-page data-media-base={env.R2_PUBLIC_BASE || ''}>
+    <section class="catalogue-section" aria-labelledby="saved-heading"><h2 id="saved-heading">Saved titles</h2><div data-library-saved><p class="quiet-empty">Enable JavaScript and browser storage to see your saved titles.</p></div></section>
+    <section class="catalogue-section" aria-labelledby="history-heading"><h2 id="history-heading">Recently viewed</h2><div data-library-history><p class="quiet-empty">Titles you open will appear here when JavaScript and browser storage are enabled.</p></div></section>
+  </div>
+</Base>

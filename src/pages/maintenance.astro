@@ -1,0 +1,7 @@
+---
+import Base from '../layouts/Base.astro';
+Astro.response.status = 503;
+Astro.response.headers.set('Cache-Control', 'no-store');
+Astro.response.headers.set('Retry-After', '3600');
+---
+<Base title="Back soon" noindex pageType="utility"><section class="empty-state"><p class="eyebrow">MAINTENANCE</p><h1>We’ll be back soon.</h1><p>The catalogue is temporarily unavailable. Please try again later.</p></section></Base>

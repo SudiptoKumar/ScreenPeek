@@ -1,0 +1,35 @@
+name = "screenpeek"
+main = "@astrojs/cloudflare/entrypoints/server"
+compatibility_date = "2026-11-08"
+compatibility_flags = ["nodejs_compat"]
+
+# Serve matching static files without invoking the Worker. The Astro adapter
+# writes the final entrypoint and asset directory into dist/server/wrangler.json.
+[assets]
+binding = "ASSETS"
+directory = "./dist/client"
+run_worker_first = false
+
+# Replace IDs with the resources you create; these are local-only placeholders.
+[[d1_databases]]
+binding = "DB"
+database_name = "movie-db"
+database_id = "00000000-0000-0000-0000-000000000001"
+migrations_dir = "db/migrations"
+
+[[kv_namespaces]]
+binding = "CONFIG"
+id = "00000000000000000000000000000001"
+
+[[r2_buckets]]
+binding = "POSTERS"
+bucket_name = "posters"
+
+[[r2_buckets]]
+binding = "BACKUPS"
+bucket_name = "screenpeek-private-backups-local"
+
+[vars]
+SITE_NAME = "ScreenPeek"
+ADS_ENABLED = "0"
+DEPLOYMENT_ENV = "preview"
