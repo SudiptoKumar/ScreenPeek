@@ -13,12 +13,14 @@ export interface SyncRow { id: number; started_at: string; finished_at: string |
 export interface HistoryRow { id: number; ts: string; actor: string | null; entity: string; entity_id: string; }
 export interface SettingRow { key: string; value: string; revision: number; }
 interface CatalogueMeters { titles: number; gated: number; people: number; clicks: number; }
+export interface RevenueDay { date: string; impressions: number; clicks: number; cpm: number; revenue: number; }
+export interface RevenueMeters { yesterday: RevenueDay | null; monthRevenue: number; monthImpressions: number; allTime: number; balanceEstimate: number; updatedAt: string | null; formats: Array<{ placement_id: number; revenue: number; impressions: number }>; }
 const like = (value: string) => `%${value.replaceAll('\\', '\\\\').replaceAll('%', '\\%').replaceAll('_', '\\_')}%`;
 export async function adminData(env: AdminEnvironment, actor: AdminIdentity, module: AdminModule, url: URL) {
   requirePermission(actor, module);
   const db = env.DB, query = (url.searchParams.get('q') || '').slice(0, 100), page = Math.min(100_000, Math.max(1, Number.parseInt(url.searchParams.get('page') || '1') || 1));
   let links: AdminLink[] = [], selectedLink: AdminLink | null = null, slots: AdminAd[] = [], titles: AdminTitle[] = [], sync: SyncRow[] = [], changes: HistoryRow[] = [], settings: SettingRow[] = [];
-  let total = 0, pending = 0, catalogue: CatalogueMeters | null = null, tools: ToolResults | null = null;
+  let total = 0, pending = 0, catalogue: CatalogueMeters | null = null, tools: ToolResults | null = null, revenue: RevenueMeters | null = null;
   let documents: TrustDocument[] = [];
   if (module === 'links') {
     const where = '(name LIKE ? ESCAPE \'\\\' OR slug LIKE ? ESCAPE \'\\\') AND deleted_at IS NULL';
@@ -46,9 +48,24 @@ export async function adminData(env: AdminEnvironment, actor: AdminIdentity, mod
       db.prepare('SELECT COUNT(*) AS count FROM admin_delivery WHERE kv_done=0 OR purge_done=0').first<{ count: number }>(),
     ]);
     catalogue = counts; changes = history.results; sync = logs.results; pending = queued?.count || 0;
+    try {
+      const now = new Date();
+      const yesterday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1)).toISOString().slice(0, 10);
+      const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString().slice(0, 10);
+      const [yRow, mRow, tRow, paidRow, fRows, uRow] = await Promise.all([
+        db.prepare('SELECT date,impressions,clicks,cpm,revenue FROM adsterra_days WHERE date=?').bind(yesterday).first<RevenueDay>(),
+        db.prepare('SELECT COALESCE(SUM(revenue),0) AS revenue,COALESCE(SUM(impressions),0) AS impressions FROM adsterra_days WHERE date>=?').bind(monthStart).first<{ revenue: number; impressions: number }>(),
+        db.prepare('SELECT COALESCE(SUM(revenue),0) AS total FROM adsterra_days').first<{ total: number }>(),
+        db.prepare("SELECT value FROM config WHERE key='money_paid_modeled'").first<{ value: string }>(),
+        db.prepare('SELECT placement_id,SUM(revenue) AS revenue,SUM(impressions) AS impressions FROM adsterra_formats GROUP BY placement_id ORDER BY revenue DESC LIMIT 6').all<{ placement_id: number; revenue: number; impressions: number }>(),
+        db.prepare('SELECT MAX(updated_at) AS at FROM adsterra_days').first<{ at: string | null }>(),
+      ]);
+      const allTime = tRow?.total || 0;
+      if (allTime > 0 || yRow || (fRows.results || []).length) revenue = { yesterday: yRow || null, monthRevenue: mRow?.revenue || 0, monthImpressions: mRow?.impressions || 0, allTime, balanceEstimate: allTime - (Number.parseFloat(paidRow?.value || '0') || 0), updatedAt: uRow?.at || null, formats: fRows.results || [] };
+    } catch { revenue = null; }
   }
   else if (module === 'tools') tools = await globalSearch(db, query);
-  return { links, selectedLink, slots, titles, sync, changes, settings, documents, total, page, pages: Math.max(1, Math.ceil(total / 50)), query, pending, catalogue, tools };
+  return { links, selectedLink, slots, titles, sync, changes, settings, documents, total, page, pages: Math.max(1, Math.ceil(total / 50)), query, pending, catalogue, tools, revenue };
 }
 export type AdminData = Awaited<ReturnType<typeof adminData>>;
 export async function exportAdminBackup(env: AdminEnvironment, actor: AdminIdentity) {
