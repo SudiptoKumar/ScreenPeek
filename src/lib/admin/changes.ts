@@ -57,7 +57,7 @@ export async function deliverChange(env: AdminEnvironment, deliveryId: number, f
     if (!env.CLOUDFLARE_API_TOKEN || !/^[a-f0-9]{32}$/i.test(env.CLOUDFLARE_ZONE_ID || '')) errors.push('Cache purge is not configured');
     else try {
       const response = await fetcher(`https://api.cloudflare.com/client/v4/zones/${env.CLOUDFLARE_ZONE_ID}/purge_cache`, {
-        method: 'POST', redirect: 'error', signal: AbortSignal.timeout(5000),
+        method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(5000),
         headers: { Authorization: `Bearer ${env.CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ purge_everything: true }),
       });
       const data: unknown = response.ok ? await response.json() : null;
@@ -82,7 +82,7 @@ export async function dispatchSync(env: AdminEnvironment, actor: AdminIdentity, 
   let accepted = false;
   try {
     const response = await fetcher(`https://api.github.com/repos/${env.GITHUB_REPO}/actions/workflows/nightly.yml/dispatches`, {
-      method: 'POST', redirect: 'error', signal: AbortSignal.timeout(8000),
+      method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(8000),
       headers: { Authorization: `Bearer ${env.GITHUB_ACTIONS_TOKEN}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'ScreenPeek-admin' },
       body: JSON.stringify({ ref: 'main', inputs: { ids, deploy: false } }),
     });
@@ -111,7 +111,7 @@ export async function dispatchJob(env: AdminEnvironment, actor: AdminIdentity, j
   let accepted = false;
   try {
     const response = await fetcher(`https://api.github.com/repos/${env.GITHUB_REPO}/actions/workflows/${spec.file}/dispatches`, {
-      method: 'POST', redirect: 'error', signal: AbortSignal.timeout(8000),
+      method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(8000),
       headers: { Authorization: `Bearer ${env.GITHUB_ACTIONS_TOKEN}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'ScreenPeek-admin' },
       body: JSON.stringify({ ref: 'main', inputs: {} }),
     });
@@ -137,7 +137,7 @@ export async function purgeCache(env: AdminEnvironment, actor: AdminIdentity, ra
   let ok = false;
   try {
     const response = await fetcher(`https://api.cloudflare.com/client/v4/zones/${env.CLOUDFLARE_ZONE_ID}/purge_cache`, {
-      method: 'POST', redirect: 'error', signal: AbortSignal.timeout(8000),
+      method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(8000),
       headers: { Authorization: `Bearer ${env.CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(files ? { files } : { purge_everything: true }),
     });

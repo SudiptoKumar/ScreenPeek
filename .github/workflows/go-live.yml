@@ -70,7 +70,7 @@ jobs:
           DEPLOYMENT_ENV: preview
           SITE_NAME: ScreenPeek
           R2_PUBLIC_BASE: ${{ steps.r2dev.outputs.base }}
-          ADS_ENABLED: '0'
+          ADS_ENABLED: '1'
         run: npm run build
       - name: Prepare preview Worker config and deploy
         env:
@@ -88,7 +88,7 @@ jobs:
           cfg.r2_buckets.find(b => b.binding === 'POSTERS').bucket_name = 'posters';
           cfg.r2_buckets.find(b => b.binding === 'BACKUPS').bucket_name = 'screenpeek-backups';
           cfg.vars = { ...cfg.vars, SITE_URL: process.env.SITE_URL, R2_PUBLIC_BASE: process.env.R2_PUBLIC_BASE,
-            DEPLOYMENT_ENV: 'preview', ADS_ENABLED: '0', SITE_NAME: 'ScreenPeek', GITHUB_REPO: 'SudiptoKumar/ScreenPeek' };
+            DEPLOYMENT_ENV: 'preview', ADS_ENABLED: '1', SITE_NAME: 'ScreenPeek', GITHUB_REPO: 'SudiptoKumar/ScreenPeek' };
           fs.writeFileSync(path, JSON.stringify(cfg, null, 2));
           console.log('config ready:', cfg.name, '| site:', cfg.vars.SITE_URL, '| images:', cfg.vars.R2_PUBLIC_BASE);
           NODEEOF

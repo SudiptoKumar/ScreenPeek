@@ -59,7 +59,7 @@ test('native admin writes audit atomically, mirror exact ad code, reject stale e
     let purges = 0;
     assert.deepEqual(await deliverChange({ ...env, CLOUDFLARE_ZONE_ID: 'a'.repeat(32), CLOUDFLARE_API_TOKEN: 'test-only-placeholder' }, delivery, (async (input, init) => {
       assert.equal(String(input), `https://api.cloudflare.com/client/v4/zones/${'a'.repeat(32)}/purge_cache`);
-      assert.equal(init?.redirect, 'error'); assert.deepEqual(JSON.parse(String(init?.body)), { purge_everything: true }); purges++;
+      assert.equal(init?.redirect, 'manual'); assert.deepEqual(JSON.parse(String(init?.body)), { purge_everything: true }); purges++;
       return Response.json({ success: true });
     }) as typeof fetch), { kv: true, purge: true });
     assert.equal(purges, 1);
