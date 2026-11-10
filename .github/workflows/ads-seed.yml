@@ -1,0 +1,86 @@
+name: Seed Adsterra ad slots
+
+# Manual, one-time: writes the Adsterra unit codes into D1 ad_slots
+# (one unit per format+size exists in Adsterra; its code is reused in
+# every matching slot), enables ads in config, and parks the Smartlink
+# in the links table. Safe to re-run (upserts). Remove after use.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  seed:
+    if: vars.SCREENPEEK_SYNC_ENABLED == '1' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+    steps:
+      - name: Seed ad slots, config and smartlink
+        run: |
+          python3 - <<'PYEOF'
+          import json, os, urllib.request, urllib.error
+          acct = os.environ['CLOUDFLARE_ACCOUNT_ID']; token = os.environ['CLOUDFLARE_API_TOKEN']
+          BANNER_300 = """<script>
+            atOptions = {
+              'key' : '5a1dfb95547fa6ddd9e08eb59e1b1040',
+              'format' : 'iframe',
+              'height' : 250,
+              'width' : 300,
+              'params' : {}
+            };
+          </script>
+          <script src="https://bancadeltempoidea.org/22/5a1dfb95547fa6ddd9e08eb59e1b1040"></script>"""
+          BANNER_320 = """<script>
+            atOptions = {
+              'key' : '8b94ed0f7e539e0c152b70f7202dfa9c',
+              'format' : 'iframe',
+              'height' : 50,
+              'width' : 320,
+              'params' : {}
+            };
+          </script>
+          <script src="https://bancadeltempoidea.org/22/8b94ed0f7e539e0c152b70f7202dfa9c"></script>"""
+          NATIVE = """<script async="async" data-cfasync="false" src="https://bancadeltempoidea.org/21/469787b71c88e9b99bd8d708583ce154"></script>
+          <div id="container-469787b71c88e9b99bd8d708583ce154"></div>"""
+          POPUNDER = '<script src="https://pl32298141.profitableratecpmnetwork.com/01/66/cd/0166cdb5793929a507e13de58fe0af7e.js"></script>'
+          SOCIAL = '<script src="https://pl32298142.profitableratecpmnetwork.com/16/61/ba/1661ba58aa5ba6ac6aa5120f1c02fb32.js"></script>'
+          SMARTLINK = 'https://www.profitableratecpmnetwork.com/ubzp3p6ynf?key=2ffb4a92aa75afbd3dcf25bc1ca1f365'
+          slots = [
+              ('home', 'top_300x250', BANNER_300), ('home', 'native', NATIVE), ('home', 'sticky_320x50', BANNER_320),
+              ('list', 'native', NATIVE), ('list', 'infeed', BANNER_300), ('list', 'sticky_320x50', BANNER_320),
+              ('detail', 'top_300x250', BANNER_300), ('detail', 'native', NATIVE), ('detail', 'sticky_320x50', BANNER_320), ('detail', 'popunder', POPUNDER),
+              ('cast', 'top_300x250', BANNER_300), ('cast', 'native', NATIVE), ('cast', 'sticky_320x50', BANNER_320),
+              ('watch', 'top_300x250', BANNER_300), ('watch', 'native', NATIVE), ('watch', 'sticky_320x50', BANNER_320),
+              ('trailer', 'top_300x250', BANNER_300), ('trailer', 'sticky_320x50', BANNER_320),
+              ('search', 'native', NATIVE), ('search', 'sticky_320x50', BANNER_320),
+              ('global', 'social_bar', SOCIAL),
+          ]
+          esc = lambda s: s.replace("'", "''")
+          stmts = []
+          for page, placement, code in slots:
+              stmts.append(f"INSERT OR REPLACE INTO ad_slots(page_type, placement, code, enabled) VALUES('{page}', '{placement}', '{esc(code)}', 1)")
+          stmts.append("INSERT INTO config(key, value) VALUES('ads_enabled', '1') ON CONFLICT(key) DO UPDATE SET value='1'")
+          stmts.append(f"INSERT OR REPLACE INTO links(slug, name, destination, type, enabled, rules) VALUES('smartlink-main', 'SP Smartlink (main)', '{SMARTLINK}', 'smartlink', 1, '{{}}')")
+          stmts.append("SELECT page_type, placement, enabled, length(code) AS code_len FROM ad_slots ORDER BY page_type, placement")
+          sql = ';\n'.join(stmts) + ';'
+          r = urllib.request.Request(f"https://api.cloudflare.com/client/v4/accounts/{acct}/d1/database/{os.environ['D1_DATABASE_ID']}/query",
+                                     data=json.dumps({'sql': sql}).encode(), method='POST')
+          r.add_header('Authorization', 'Bearer ' + token); r.add_header('Content-Type', 'application/json')
+          try:
+              with urllib.request.urlopen(r) as resp: out = json.load(resp)
+          except urllib.error.HTTPError as e:
+              print('HTTP error:', e.code, e.read().decode('utf-8', 'replace')[:400]); raise SystemExit(1)
+          print('success:', out.get('success'))
+          if not out.get('success'): print('errors:', json.dumps(out.get('errors'))[:400])
+          results = out.get('result') or []
+          last = results[-1] if results else {}
+          rows = last.get('results') or []
+          print('ad_slots now:', len(rows))
+          for row in rows: print(' slot:', row)
+          PYEOF
