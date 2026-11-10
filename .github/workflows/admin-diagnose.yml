@@ -1,0 +1,70 @@
+name: Admin access diagnose and repair
+
+# Manual: prints the admin_users rows, the Access org/app/policy state, and
+# re-writes the Worker's CF_ACCESS_TEAM_DOMAIN / CF_ACCESS_AUD secrets from
+# the live Access values, so any mismatch from the first setup is healed.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    if: vars.SCREENPEEK_SYNC_ENABLED == '1' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci --no-fund
+      - name: Inspect and repair admin access wiring
+        run: |
+          python3 - <<'PYEOF'
+          import json, os, subprocess, urllib.request, urllib.error
+          acct = os.environ['CLOUDFLARE_ACCOUNT_ID']; token = os.environ['CLOUDFLARE_API_TOKEN']
+          def call(method, path, body=None):
+              data = json.dumps(body).encode() if body is not None else None
+              r = urllib.request.Request('https://api.cloudflare.com/client/v4' + path, data=data, method=method)
+              r.add_header('Authorization', 'Bearer ' + token); r.add_header('Content-Type', 'application/json')
+              try:
+                  with urllib.request.urlopen(r) as resp: return json.load(resp)
+              except urllib.error.HTTPError as e:
+                  return {'success': False, 'errors': [{'message': f'HTTP {e.code}: ' + e.read().decode("utf-8", "replace")[:300]}]}
+          # 1) admin_users rows via the D1 HTTP API
+          q = call('POST', f"/accounts/{acct}/d1/database/{os.environ['D1_DATABASE_ID']}/query",
+                   {'sql': 'SELECT email, role, modules FROM admin_users'})
+          print('admin_users query success:', q.get('success'))
+          for row in ((q.get('result') or [{}])[0].get('results') or []):
+              print('admin_user:', row.get('email'), '| role:', row.get('role'), '| modules:', row.get('modules'))
+          if not q.get('success'): print('d1 errors:', json.dumps(q.get('errors'))[:300])
+          # 2) Access org + apps + policies
+          org = call('GET', f'/accounts/{acct}/access/organizations')
+          org_result = (org or {}).get('result') or {}
+          team_domain = org_result.get('auth_domain')
+          print('team domain:', team_domain)
+          apps = call('GET', f'/accounts/{acct}/access/apps')
+          app = next((a for a in ((apps or {}).get('result') or []) if 'screenpeek' in (a.get('domain') or '')), None)
+          if not app: raise SystemExit('no ScreenPeek Access app found')
+          print('app:', app.get('id'), '| domain:', app.get('domain'), '| type:', app.get('type'), '| aud:', app.get('aud'))
+          pols = call('GET', f"/accounts/{acct}/access/apps/{app['id']}/policies")
+          for p in ((pols or {}).get('result') or []):
+              print('policy:', p.get('name'), '| decision:', p.get('decision'), '| include:', json.dumps(p.get('include')))
+          # 3) Re-put both Worker secrets from the live values
+          for name, value in [('CF_ACCESS_TEAM_DOMAIN', team_domain), ('CF_ACCESS_AUD', app.get('aud'))]:
+              if not value: raise SystemExit(f'missing live value for {name}')
+              proc = subprocess.run(['node', 'scripts/tool.mjs', 'wrangler', 'secret', 'put', name],
+                                    input=value.encode(), capture_output=True)
+              print('secret re-put', name, '->', 'ok' if proc.returncode == 0 else proc.stderr.decode("utf-8", "replace")[:300])
+          PYEOF
