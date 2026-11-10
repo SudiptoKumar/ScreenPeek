@@ -1,0 +1,151 @@
+name: Go live (pre-domain, workers.dev)
+
+# Manual one-shot launcher for the pre-domain live site on workers.dev.
+# The production deploy (scripts/deploy.mjs) stays gated on an owned R2
+# custom domain (task 1.26); this workflow publishes the same build with
+# DEPLOYMENT_ENV=preview (noindex) and the posters bucket's r2.dev URL as
+# the temporary image base. It never touches the production gates.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: screenpeek-golive-main
+  cancel-in-progress: false
+
+jobs:
+  go-live:
+    if: vars.SCREENPEEK_SYNC_ENABLED == '1' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+      KV_NAMESPACE_ID: ${{ secrets.KV_NAMESPACE_ID }}
+      SITE_URL: https://screenpeek.screenpeek.workers.dev
+      OWNER_EMAIL: karn.sudipto@gmail.com
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci --no-fund
+      - name: Enable r2.dev image base for posters bucket
+        id: r2dev
+        run: |
+          python3 - <<'PYEOF'
+          import json, os, urllib.request, urllib.error
+          acct = os.environ['CLOUDFLARE_ACCOUNT_ID']; token = os.environ['CLOUDFLARE_API_TOKEN']
+          base = f'https://api.cloudflare.com/client/v4/accounts/{acct}/r2/buckets/posters/domains/managed'
+          def call(method, body=None):
+              data = json.dumps(body).encode() if body is not None else None
+              r = urllib.request.Request(base, data=data, method=method)
+              r.add_header('Authorization', 'Bearer ' + token); r.add_header('Content-Type', 'application/json')
+              try:
+                  with urllib.request.urlopen(r) as resp: return json.load(resp)
+              except urllib.error.HTTPError as e:
+                  return {'success': False, 'errors': [{'message': f'HTTP {e.code}: ' + e.read().decode("utf-8", "replace")[:200]}]}
+          state = call('GET')
+          result = (state or {}).get('result') or {}
+          if not result.get('enabled'):
+              state = call('PUT', {'enabled': True})
+              result = (state or {}).get('result') or {}
+          if not state.get('success') or not result.get('domain'):
+              raise SystemExit('r2.dev enable failed: ' + json.dumps((state or {}).get('errors')))
+          domain = result['domain']
+          print('r2.dev domain:', domain)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as fh: fh.write(f'base=https://{domain}\n')
+          PYEOF
+      - name: Build static hubs and top titles with long-tail Worker
+        env:
+          STATIC_SOURCE_REMOTE: '1'
+          DEPLOYMENT_ENV: preview
+          SITE_NAME: ScreenPeek
+          R2_PUBLIC_BASE: ${{ steps.r2dev.outputs.base }}
+          ADS_ENABLED: '0'
+        run: npm run build
+      - name: Prepare preview Worker config and deploy
+        env:
+          R2_PUBLIC_BASE: ${{ steps.r2dev.outputs.base }}
+        run: |
+          node - <<'NODEEOF'
+          const fs = require('node:fs');
+          const path = 'dist/server/wrangler.json';
+          const cfg = JSON.parse(fs.readFileSync(path, 'utf8'));
+          cfg.account_id = process.env.CLOUDFLARE_ACCOUNT_ID;
+          const db = cfg.d1_databases.find(b => b.binding === 'DB');
+          db.database_id = process.env.D1_DATABASE_ID;
+          const kv = cfg.kv_namespaces.find(b => b.binding === 'CONFIG');
+          kv.id = process.env.KV_NAMESPACE_ID; delete kv.preview_id;
+          cfg.r2_buckets.find(b => b.binding === 'POSTERS').bucket_name = 'posters';
+          cfg.r2_buckets.find(b => b.binding === 'BACKUPS').bucket_name = 'screenpeek-backups';
+          cfg.vars = { ...cfg.vars, SITE_URL: process.env.SITE_URL, R2_PUBLIC_BASE: process.env.R2_PUBLIC_BASE,
+            DEPLOYMENT_ENV: 'preview', ADS_ENABLED: '0', SITE_NAME: 'ScreenPeek', GITHUB_REPO: 'SudiptoKumar/ScreenPeek' };
+          fs.writeFileSync(path, JSON.stringify(cfg, null, 2));
+          console.log('config ready:', cfg.name, '| site:', cfg.vars.SITE_URL, '| images:', cfg.vars.R2_PUBLIC_BASE);
+          NODEEOF
+          node scripts/tool.mjs wrangler deploy --config dist/server/wrangler.json
+      - name: Seed admin owner row
+        run: |
+          node scripts/tool.mjs wrangler d1 execute DB --remote --config dist/server/wrangler.json --command "INSERT OR IGNORE INTO admin_users(email, role, modules) VALUES('${OWNER_EMAIL}', 'owner', '{}')"
+      - name: Configure Cloudflare Access for /admin
+        continue-on-error: true
+        run: |
+          python3 - <<'PYEOF'
+          import json, os, subprocess, urllib.request, urllib.error
+          acct = os.environ['CLOUDFLARE_ACCOUNT_ID']; token = os.environ['CLOUDFLARE_API_TOKEN']
+          site_host = os.environ['SITE_URL'].removeprefix('https://')
+          def call(method, path, body=None):
+              data = json.dumps(body).encode() if body is not None else None
+              r = urllib.request.Request('https://api.cloudflare.com/client/v4' + path, data=data, method=method)
+              r.add_header('Authorization', 'Bearer ' + token); r.add_header('Content-Type', 'application/json')
+              try:
+                  with urllib.request.urlopen(r) as resp: return json.load(resp)
+              except urllib.error.HTTPError as e:
+                  return {'success': False, 'errors': [{'message': f'HTTP {e.code}: ' + e.read().decode("utf-8", "replace")[:300]}]}
+          org = call('GET', f'/accounts/{acct}/access/organizations')
+          org_result = (org or {}).get('result') or {}
+          if not org.get('success') or not org_result.get('auth_domain'):
+              created = call('POST', f'/accounts/{acct}/access/organizations', {'name': 'ScreenPeek', 'auth_domain': 'screenpeek.cloudflareaccess.com'})
+              org_result = (created or {}).get('result') or {}
+              if not created.get('success') or not org_result.get('auth_domain'):
+                  raise SystemExit('Access organization unavailable: ' + json.dumps((created or org).get('errors')))
+          team_domain = org_result['auth_domain']
+          print('team domain:', team_domain)
+          apps = call('GET', f'/accounts/{acct}/access/apps')
+          app = next((a for a in ((apps or {}).get('result') or []) if a.get('domain', '').startswith(site_host + '/admin')), None)
+          if not app:
+              made = call('POST', f'/accounts/{acct}/access/apps', {
+                  'name': 'ScreenPeek Admin', 'domain': site_host + '/admin', 'type': 'self_hosted',
+                  'session_duration': '24h', 'app_launcher_visible': False})
+              app = (made or {}).get('result') or {}
+              if not made.get('success') or not app.get('id'):
+                  raise SystemExit('Access app creation failed: ' + json.dumps((made or {}).get('errors')))
+              pol = call('POST', f"/accounts/{acct}/access/apps/{app['id']}/policies", {
+                  'name': 'Owner only', 'decision': 'allow', 'precedence': 1,
+                  'include': [{'email': {'email': os.environ['OWNER_EMAIL']}}]})
+              if not pol.get('success'):
+                  raise SystemExit('Access policy creation failed: ' + json.dumps(pol.get('errors')))
+          aud = app.get('aud')
+          if not aud: raise SystemExit('Access app has no AUD')
+          print('access app:', app['id'], '| aud set')
+          for name, value in [('CF_ACCESS_TEAM_DOMAIN', team_domain), ('CF_ACCESS_AUD', aud)]:
+              p = subprocess.run(['node', 'scripts/tool.mjs', 'wrangler', 'secret', 'put', name, '--config', 'dist/server/wrangler.json'],
+                                 input=value.encode(), capture_output=True)
+              if p.returncode != 0: raise SystemExit(f'secret put {name} failed: ' + p.stderr.decode("utf-8", "replace")[:300])
+              print('secret set:', name)
+          PYEOF
+      - name: Smoke test live site
+        run: |
+          for path in / /movie /tv /admin; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "${SITE_URL}${path}" || echo ERR)
+            echo "${path} -> ${code}"
+          done
