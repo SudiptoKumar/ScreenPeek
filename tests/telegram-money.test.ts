@@ -91,7 +91,7 @@ test('buildWidgetChatData fails loudly without an Adsterra token', async () => {
 
 test('handleWidgetQuery refreshes the owner card, then answers the query', async () => {
   const calls: RecordedCall[] = [];
-  await handleWidgetQuery(fakeEnv(), { id: 'q1', data: 'refresh', message: { message_id: 38, chat: { id: 555 } } }, fixtureFetcher(calls));
+  await handleWidgetQuery(fakeEnv(), { id: 'q1', data: 'refresh', chat: { id: 555 }, message_id: 38 }, fixtureFetcher(calls));
   const telegramCalls = calls.filter(call => call.url.includes('api.telegram.org'));
   assert.equal(telegramCalls.length, 2);
   assert.ok(telegramCalls[0].url.endsWith('/editMessageWidgetData'));
@@ -105,13 +105,13 @@ test('handleWidgetQuery refreshes the owner card, then answers the query', async
 
 test('handleWidgetQuery ignores other chats without any network call', async () => {
   const calls: RecordedCall[] = [];
-  await handleWidgetQuery(fakeEnv(), { id: 'q2', data: 'refresh', message: { message_id: 38, chat: { id: 999 } } }, fixtureFetcher(calls));
+  await handleWidgetQuery(fakeEnv(), { id: 'q2', data: 'refresh', chat: { id: 999 }, message_id: 38 }, fixtureFetcher(calls));
   assert.equal(calls.length, 0);
 });
 
 test('handleWidgetQuery still answers when Telegram reports the data as not modified', async () => {
   const calls: RecordedCall[] = [];
   const fetcher = fixtureFetcher(calls, { editResult: { ok: false, error_code: 400, description: 'Bad Request: message is not modified' } });
-  await handleWidgetQuery(fakeEnv(), { id: 'q3', data: 'refresh', message: { message_id: 38, chat: { id: 555 } } }, fetcher);
+  await handleWidgetQuery(fakeEnv(), { id: 'q3', data: 'refresh', chat: { id: 555 }, message_id: 38 }, fetcher);
   assert.ok(calls.some(call => call.url.includes('answerWidgetQuery')));
 });

@@ -35,7 +35,12 @@ export interface WidgetChatData {
 export interface WidgetQuery {
   id: string;
   data?: string;
-  message?: { message_id?: number; chat?: { id?: number | string } };
+  // Bot API 10.4 WidgetQuery shape: chat and message_id are TOP-LEVEL fields
+  // (there is no nested `message` object — reading one makes every real
+  // query look empty and the handler silently never answers).
+  chat?: { id?: number | string };
+  message_id?: number;
+  from?: { id?: number | string };
 }
 
 const DOMAIN_ID = 6190252; // screenpeek.screenpeek.workers.dev
@@ -164,8 +169,10 @@ async function telegram(env: TelegramMoneyEnvironment, method: string, payload: 
  * answer within about 15 seconds). Queries from any other chat are ignored.
  */
 export async function handleWidgetQuery(env: TelegramMoneyEnvironment, query: WidgetQuery, fetcher: typeof fetch = fetch): Promise<void> {
-  const chatId = query.message?.chat?.id;
-  const messageId = query.message?.message_id;
+  // In the owner's private chat with the bot, chat.id and from.id are the
+  // same number; accept either so a payload missing `chat` still resolves.
+  const chatId = query.chat?.id ?? query.from?.id;
+  const messageId = query.message_id;
   if (chatId === undefined || messageId === undefined) return;
   if (!env.MONEY_BOT_TOKEN || !env.MONEY_BOT_CHAT_ID) return;
   if (String(chatId) !== env.MONEY_BOT_CHAT_ID) return;
