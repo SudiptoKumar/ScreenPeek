@@ -106,7 +106,7 @@ def send_telegram(text):
     try:
         out = http_json(f"https://api.telegram.org/bot{token}/sendMessage",
                         headers={"Content-Type": "application/json"},
-                        data=json.dumps({"chat_id": chat, "text": text}).encode())
+                        data=json.dumps({"chat_id": chat, "text": text, "parse_mode": "HTML"}).encode())
         print("telegram: sent" if out.get("ok") else f"telegram: failed {out}")
         return bool(out.get("ok"))
     except Exception as exc:  # keep the run alive; state is not recorded, so it retries next run
@@ -199,7 +199,11 @@ def main():
 
     # first earning
     if prev_total <= 0 < total and get_config(d1, "money_first_earning_done") != "1":
-        sent = send_telegram(f"🎉 ScreenPeek earned its first money!\nTotal earned so far: {money(total)}\nThe ads are live and working.") if bot_ready else False
+        msg = ("🎉 <b>First earning!</b>\n\n"
+               "ScreenPeek just made its first money from ads.\n"
+               f"💰 Total earned: <b>{money(total)}</b>\n\n"
+               "<i>The ads are live and working. Next stop: the $10 milestone.</i>")
+        sent = send_telegram(msg) if bot_ready else False
         if sent or not bot_ready:
             record("money_first_earning_done", "1")
 
@@ -207,9 +211,10 @@ def main():
     newly = [m for m in MILESTONES if m <= total and m not in fired]
     for m in newly:
         nxt = next((x for x in MILESTONES if x > m), None)
-        msg = (f"🏆 Milestone complete: {money(m)}!\n"
-               f"ScreenPeek total earnings have passed {money(m)} (now {money(total)})."
-               + (f"\nNext milestone: {money(nxt)}." if nxt else ""))
+        msg = (f"🏆 <b>Milestone complete — {money(m)}!</b>\n\n"
+               f"💰 Total earnings: <b>{money(total)}</b>"
+               + (f"\n🎯 Next milestone: <b>{money(nxt)}</b> ({money(nxt - total)} to go)" if nxt else "")
+               + "\n\n<i>ScreenPeek keeps earning while you sleep.</i>")
         if bot_ready:
             if send_telegram(msg):
                 fired.add(m)
@@ -248,10 +253,11 @@ def main():
             minimum = float(minimum_raw) if minimum_raw else 100.0
             if payable > 0 and (minimum is None or payable >= minimum):
                 window = "1st–2nd" if payday.day == 1 else "16th–17th"
-                msg = (f"💸 Payout expected: about {money(payable)}\n"
-                       f"For earnings up to {p_end.isoformat()}, Adsterra pays on the {window} "
-                       f"({payday.strftime('%B %Y')}), 09:00–18:00 GMT.\n"
-                       "This is the calendar expectation from your revenue — Adsterra's Payouts page is the final confirmation.")
+                msg = (f"💸 <b>Payout expected — about {money(payable)}</b>\n\n"
+                       f"📅 Earnings period: up to <b>{p_end.strftime('%b %d, %Y')}</b>\n"
+                       f"🗓 Adsterra pays on the <b>{window} ({payday.strftime('%B %Y')})</b>, 09:00–18:00 GMT\n"
+                       "💳 Method: Crypto — minimum reached ✓\n\n"
+                       "<i>This is the calendar expectation from your revenue. Adsterra's Payouts page is the final confirmation.</i>")
                 sent = send_telegram(msg) if bot_ready else False
                 if sent or not bot_ready:
                     record("money_last_payout_alert", pkey)
@@ -272,17 +278,24 @@ def main():
         mrow = (d1.rows(f"SELECT COALESCE(SUM(revenue),0) AS r, COALESCE(SUM(impressions),0) AS i "
                         f"FROM adsterra_days WHERE date >= '{month_start.isoformat()}'") or [{"r": 0, "i": 0}])[0]
         nxt = next((x for x in MILESTONES if x > total), None)
-        lines = ["📊 ScreenPeek daily money summary",
-                 f"Yesterday ({yday.isoformat()}, UTC): {money(float(yrow['revenue'])) if yrow else money(0)}"
-                 + (f" · {int(yrow['impressions']):,} impressions · {int(yrow['clicks'])} clicks · CPM ${float(yrow['cpm']):.2f}" if yrow else " · no data"),
-                 f"This month: {money(float(mrow['r']))} · {int(mrow['i']):,} impressions",
-                 f"Earned all time: {money(total)} · Balance (estimate): {money(balance_est)}"]
+        lines = ["📊 <b>ScreenPeek — Daily Money Summary</b>",
+                 f"<i>Yesterday · {yday.strftime('%b %d')} (UTC day)</i>",
+                 "",
+                 f"💵 Revenue: <b>{money(float(yrow['revenue'])) if yrow else money(0)}</b>"
+                 + (f"\n👁 Impressions: <b>{int(yrow['impressions']):,}</b> · 🖱 Clicks: <b>{int(yrow['clicks'])}</b>\n📈 CPM: <b>${float(yrow['cpm']):.2f}</b>" if yrow else "\n<i>No ad data recorded for yesterday.</i>"),
+                 "",
+                 "━━━━━━━━━━━━━━",
+                 f"📅 <b>This month:</b> {money(float(mrow['r']))} · {int(mrow['i']):,} impressions",
+                 f"🏦 <b>Earned all time:</b> {money(total)}",
+                 f"💰 <b>Balance (estimate):</b> {money(balance_est)}"]
         if nxt:
-            lines.append(f"Next milestone: {money(nxt)} ({money(nxt - total)} to go)")
+            lines.append(f"🎯 <b>Next milestone:</b> {money(nxt)} ({money(nxt - total)} to go)")
         if balance_est < 100:
-            lines.append(f"Payout progress: {money(balance_est)} of the $100 crypto minimum")
+            filled = int(balance_est / 100 * 10)
+            bar = "▰" * filled + "▱" * (10 - filled)
+            lines.append(f"🚀 <b>Payout progress:</b> {money(balance_est)} of $100\n{bar}")
         else:
-            lines.append(f"Balance is over the $100 payout minimum — next expected payout window applies.")
+            lines.append("🚀 <b>Payout minimum reached</b> — the next pay window (1st–2nd / 16th–17th) applies.")
         if send_telegram("\n".join(lines)) or not bot_ready:
             record("money_last_daily", today.isoformat())
 
