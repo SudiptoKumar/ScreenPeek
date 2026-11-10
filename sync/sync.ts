@@ -47,7 +47,10 @@ try {
   // clamped to [1 minute, 25 minutes] so it stays inside the job timeout.
   const requestedDuration = Number(process.env.SYNC_MAX_DURATION_MS);
   const maxDurationMs = Number.isSafeInteger(requestedDuration) && requestedDuration > 0
-    ? Math.min(Math.max(requestedDuration, 60_000), 25 * 60_000) : undefined;
+    ? Math.min(Math.max(requestedDuration, 60_000), 25 * 60_000)
+    // Targeted imports are operator-run, so they get the longer ceiling by
+    // default; scheduled catalogue runs keep the engine's 12-minute default.
+    : (targets.length || personIds.length ? 25 * 60_000 : undefined);
   const summary = await runSync({ db, images, client,
     environment: fixture ? {} : process.env,
     source: process.env.GITHUB_EVENT_NAME === 'schedule' ? 'cron' : 'manual',
