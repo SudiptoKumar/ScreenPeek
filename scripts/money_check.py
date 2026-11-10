@@ -5,7 +5,9 @@ Pulls Adsterra statistics for the ScreenPeek domain into D1 (adsterra_days /
 adsterra_formats) and sends Telegram money alerts via @TrafeeUpdatebot:
   * first earning, balance milestones ($10..$10,000 ladder incl. $50/$100)
   * expected-payout notices on Adsterra's NET-15 paydays (1st-2nd / 16th-17th)
-  * one daily summary at/after 09:00 Dhaka (03:00 UTC)
+  * one daily summary at/after 09:00 Dhaka (03:00 UTC) — replaced by the two
+    live widget cards (Emerald Vault + Solar Pulse) once the bot is on:
+    sent once via sendWidget, then refreshed in place every run
 
 Design notes (verified against Adsterra's Publisher API docs + live calls):
   * The API has NO balance or payments endpoint. Milestones come from the
@@ -136,6 +138,89 @@ def send_alert(rich_html, fallback_html):
     if send_rich(rich_html):
         return True
     return send_telegram(fallback_html)
+
+
+# ---------- live widget cards (pinned dashboards, updated in place) ----------
+WIDGET_FILES = [("money_widget2_msg", "emerald_vault.html"),
+                ("money_widget3_msg", "solar_pulse.html")]
+
+
+def bot_call(method, payload):
+    token = os.environ.get("MONEY_BOT_TOKEN")
+    chat = os.environ.get("MONEY_BOT_CHAT_ID")
+    if not token or not chat:
+        return None
+    payload = dict(payload)
+    payload["chat_id"] = chat
+    try:
+        return http_json(f"https://api.telegram.org/bot{token}/{method}",
+                         headers={"Content-Type": "application/json"},
+                         data=json.dumps(payload).encode())
+    except Exception as exc:
+        print(f"telegram {method}: error", exc)
+        return None
+
+
+def widget_chat_data(d1, today, total, balance_est, payout_min):
+    from datetime import datetime, timezone
+    trow = (d1.rows(f"SELECT * FROM adsterra_days WHERE date='{today.isoformat()}'") or [None])[0] or {}
+    month_start = today.replace(day=1)
+    mrow = (d1.rows(f"SELECT COALESCE(SUM(revenue),0) AS r, COALESCE(SUM(impressions),0) AS i "
+                    f"FROM adsterra_days WHERE date >= '{month_start.isoformat()}'") or [{"r": 0, "i": 0}])[0]
+    rows = d1.rows("SELECT revenue FROM adsterra_days ORDER BY date DESC LIMIT 7")
+    trend = [float(r["revenue"]) for r in reversed(rows)]
+    while len(trend) < 7:
+        trend.insert(0, 0.0)
+    nxt = next((x for x in MILESTONES if x > total), MILESTONES[-1] * 2)
+    data = {
+        "revenue": float(trow.get("revenue", 0) or 0),
+        "impressions": int(trow.get("impressions", 0) or 0),
+        "clicks": int(trow.get("clicks", 0) or 0),
+        "ctr": float(trow.get("ctr", 0) or 0),
+        "cpm": float(trow.get("cpm", 0) or 0),
+        "month_revenue": float(mrow["r"]),
+        "month_impressions": int(mrow["i"]),
+        "earned": total,
+        "balance": balance_est,
+        "milestone": float(nxt),
+        "payout_target": float(payout_min),
+        "trend": trend,
+        "updated": datetime.now(timezone.utc).strftime("%b %d · %H:%M UTC"),
+    }
+    return json.dumps(data, separators=(",", ":"))
+
+
+def sync_widgets(d1, data_str):
+    """Send the two live cards once, then keep their data fresh in place.
+    Returns True when the bot is configured (widgets are the dashboard)."""
+    if not (os.environ.get("MONEY_BOT_TOKEN") and os.environ.get("MONEY_BOT_CHAT_ID")):
+        return False
+    last = get_config(d1, "money_widget_data")
+    base = os.path.join(os.path.dirname(os.path.abspath(__file__)), "widgets")
+    for key, fname in WIDGET_FILES:
+        msg_id = get_config(d1, key)
+        if not msg_id:
+            try:
+                with open(os.path.join(base, fname), encoding="utf-8") as fh:
+                    html = fh.read()
+            except Exception as exc:
+                print("widget file missing:", fname, exc)
+                continue
+            out = bot_call("sendWidget", {"html": html, "chat_data": data_str,
+                                          "allow_queries": True})
+            if out and out.get("ok"):
+                set_config(d1, key, str(out["result"]["message_id"]))
+                print("widget sent:", fname, out["result"]["message_id"])
+            else:
+                print("widget send failed:", fname, (out or {}).get("description"))
+        elif data_str != last:
+            out = bot_call("editMessageWidgetData",
+                           {"message_id": int(msg_id), "chat_data": data_str})
+            if out and not out.get("ok") and "not modified" not in str(out.get("description", "")).lower():
+                print("widget edit failed:", fname, out.get("description"))
+    if data_str != last:
+        set_config(d1, "money_widget_data", data_str)
+    return True
 
 
 def money(value):
@@ -307,10 +392,18 @@ def main():
                 record("money_last_payout_alert", pkey)  # below minimum: rolls over, no alert
                 print(f"payout for period {pkey}: payable {payable} below minimum {minimum}; rolling over")
 
+    # live widget cards: sent once, then refreshed in place every run.
+    # When they are on, they REPLACE the daily summary message.
+    _min_raw = get_config(d1, "payout_min_usd")
+    payout_min = float(_min_raw) if _min_raw else 100.0
+    widgets_on = sync_widgets(d1, widget_chat_data(d1, today, total, balance_est, payout_min))
+
     # daily summary at/after 03:00 UTC (09:00 Dhaka), once per UTC day
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc)
-    if now.hour >= 3 and get_config(d1, "money_last_daily") != today.isoformat():
+    if widgets_on and now.hour >= 3 and get_config(d1, "money_last_daily") != today.isoformat():
+        record("money_last_daily", today.isoformat())  # covered by the widgets now
+    if now.hour >= 3 and not widgets_on and get_config(d1, "money_last_daily") != today.isoformat():
         yday = today - timedelta(days=1)
         yrow = (d1.rows(f"SELECT * FROM adsterra_days WHERE date='{yday.isoformat()}'") or [None])[0]
         month_start = today.replace(day=1)
