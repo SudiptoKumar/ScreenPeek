@@ -29,7 +29,7 @@
     "test:catalogue": "node scripts/tool.mjs node --test tests/catalogue.test.ts tests/detail.test.ts tests/seasons.test.ts tests/people.test.ts tests/hubs.test.ts tests/trailer.test.ts tests/search.test.ts tests/watch.test.ts",
     "test:redirects": "node scripts/tool.mjs node --test tests/redirects.test.ts",
     "test:votes": "node scripts/tool.mjs node --test tests/votes.test.ts",
-    "test:ads": "node scripts/tool.mjs node --test tests/ads.test.ts",
+    "test:ads": "node scripts/tool.mjs node --test tests/ads.test.ts tests/telegram-money.test.ts",
     "test:admin": "node scripts/tool.mjs node --test tests/admin.test.ts tests/admin-v2.test.ts tests/universal.test.ts tests/restore.test.ts tests/health.test.ts tests/metadata.test.ts tests/tools.test.ts",
     "test:trust": "node scripts/tool.mjs node --test tests/trust.test.ts",
     "test:seo": "node scripts/tool.mjs node --test tests/seo.test.ts",

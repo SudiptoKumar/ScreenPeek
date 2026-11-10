@@ -20,7 +20,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     let maintenance = false;
     try { maintenance = await readConfig(env, 'maintenance') === '1'; } catch { /* The route retains its own storage-failure handling. */ }
     if (maintenance) {
-      if (path.startsWith('/api/') || path.startsWith('/go/')) return new Response('Service temporarily unavailable.', { status: 503, headers: { 'Cache-Control': 'no-store', 'Retry-After': '3600' } });
+      if (path.startsWith('/api/') || path.startsWith('/go/') || path.startsWith('/telegram/')) return new Response('Service temporarily unavailable.', { status: 503, headers: { 'Cache-Control': 'no-store', 'Retry-After': '3600' } });
       return context.rewrite('/maintenance/');
     }
   }

@@ -143,9 +143,25 @@ jobs:
               if p.returncode != 0: raise SystemExit(f'secret put {name} failed: ' + p.stderr.decode("utf-8", "replace")[:300])
               print('secret set:', name)
           PYEOF
+      - name: Set money webhook secrets
+        env:
+          ADSTERRA_API_TOKEN: ${{ secrets.ADSTERRA_API_TOKEN }}
+          MONEY_BOT_TOKEN: ${{ secrets.MONEY_BOT_TOKEN }}
+          MONEY_BOT_CHAT_ID: ${{ secrets.MONEY_BOT_CHAT_ID }}
+          MONEY_WEBHOOK_SECRET: ${{ secrets.MONEY_WEBHOOK_SECRET }}
+        run: |
+          for name in ADSTERRA_API_TOKEN MONEY_BOT_TOKEN MONEY_BOT_CHAT_ID MONEY_WEBHOOK_SECRET; do
+            if [ -z "${!name}" ]; then echo "missing GitHub secret: $name" >&2; exit 1; fi
+            printf '%s' "${!name}" | node scripts/tool.mjs wrangler secret put "$name" --config dist/server/wrangler.json
+            echo "secret set: $name"
+          done
       - name: Smoke test live site
         run: |
           for path in / /movie /tv /admin; do
             code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "${SITE_URL}${path}" || echo ERR)
             echo "${path} -> ${code}"
           done
+      - name: Register Telegram webhook
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.MONEY_BOT_TOKEN }}/setWebhook" --data-urlencode "url=https://screenpeek.screenpeek.workers.dev/telegram/money-webhook/" --data-urlencode "secret_token=${{ secrets.MONEY_WEBHOOK_SECRET }}" --data-urlencode 'allowed_updates=["widget_query"]'
+          echo

@@ -15,6 +15,10 @@ interface ScreenPeekBindings {
   CLOUDFLARE_API_TOKEN?: string;
   GITHUB_REPO?: string;
   GITHUB_ACTIONS_TOKEN?: string;
+  ADSTERRA_API_TOKEN?: string;
+  MONEY_BOT_TOKEN?: string;
+  MONEY_BOT_CHAT_ID?: string;
+  MONEY_WEBHOOK_SECRET?: string;
   R2_PUBLIC_BASE?: string;
   ASSETS: Fetcher;
 }
