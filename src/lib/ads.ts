@@ -1,12 +1,19 @@
+// Every in-flow area is a STACK of up to three units: the base placement
+// plus its `_b` and `_c` partners, so different ad networks can run in
+// the same area (the extras render only when filled — no empty boxes).
+// Stacking stops at three on purpose: more units slow the page and
+// collapse click rates. There is deliberately NO second popunder
+// placement: one popunder per visit, from one network, is the rule
+// every network's terms and rates depend on.
 export const adMap = {
-  home: ['top_300x250', 'native', 'sticky_320x50'],
-  list: ['native', 'infeed', 'sticky_320x50'],
-  detail: ['top_300x250', 'native', 'sticky_320x50', 'popunder'],
-  cast: ['top_300x250', 'native', 'sticky_320x50'],
-  watch: ['top_300x250', 'native', 'sticky_320x50'],
-  trailer: ['top_300x250', 'sticky_320x50'],
-  search: ['native', 'sticky_320x50'],
-  global: ['social_bar'],
+  home: ['top_300x250', 'top_300x250_b', 'top_300x250_c', 'native', 'native_b', 'native_c', 'sticky_320x50'],
+  list: ['native', 'native_b', 'native_c', 'infeed', 'infeed_b', 'infeed_c', 'sticky_320x50'],
+  detail: ['top_300x250', 'top_300x250_b', 'top_300x250_c', 'native', 'native_b', 'native_c', 'sticky_320x50', 'popunder'],
+  cast: ['top_300x250', 'top_300x250_b', 'top_300x250_c', 'native', 'native_b', 'native_c', 'sticky_320x50'],
+  watch: ['top_300x250', 'top_300x250_b', 'top_300x250_c', 'native', 'native_b', 'native_c', 'sticky_320x50'],
+  trailer: ['top_300x250', 'top_300x250_b', 'top_300x250_c', 'sticky_320x50'],
+  search: ['native', 'native_b', 'native_c', 'sticky_320x50'],
+  global: ['social_bar', 'inpage_push', 'interstitial', 'push_notifications'],
 } as const;
 export type AdPage = keyof typeof adMap;
 export type AdPlacement = typeof adMap[AdPage][number];
@@ -48,7 +55,8 @@ export function createAdResolver(env: AdEnvironment, authenticatedTest = false) 
       try {
         const config = await loadSettings();
         if (!config.enabled) return null;
-        const format = placement === 'popunder' ? 'popunder' : placement === 'social_bar' ? 'social' : placement === 'sticky_320x50' ? 'sticky' : ['native','infeed'].includes(placement) ? 'native' : 'display';
+        const basePlacement = placement.replace(/_[bc]$/, '');
+        const format = basePlacement === 'popunder' ? 'popunder' : basePlacement === 'social_bar' ? 'social' : basePlacement === 'sticky_320x50' ? 'sticky' : basePlacement === 'inpage_push' ? 'push' : basePlacement === 'interstitial' ? 'interstitial' : basePlacement === 'push_notifications' ? 'notifications' : ['native','infeed'].includes(basePlacement) ? 'native' : 'display';
         const formatKey = `ads_${format}_enabled`;
         if (!formats.has(formatKey)) formats.set(formatKey, readConfig(env, formatKey));
         if (await formats.get(formatKey) === '0') return null;

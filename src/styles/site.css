@@ -40,3 +40,8 @@ img[data-lazy-src]{visibility:hidden}.poster-frame:has(>img[data-lazy-src]){aspe
 .detail-hero{background:linear-gradient(120deg,color-mix(in srgb,var(--poster-color,#20202b) 16%,var(--panel)),var(--panel))}
 
 .streaming-strip{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}.streaming-strip a{display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;font-size:12px}.streaming-strip img{width:28px;height:28px;object-fit:contain}
+
+/* Stacked partner units (2nd/3rd network in the same area): sit on the
+   same 24px rhythm as every other block — no doubled gaps, no junk look. */
+.ad-slot[data-placement$="_b"],.ad-slot[data-placement$="_c"]{margin-top:0}
+.grid-ad .ad-slot[data-placement$="_b"],.grid-ad .ad-slot[data-placement$="_c"],.grid-infeed .ad-slot[data-placement$="_b"],.grid-infeed .ad-slot[data-placement$="_c"]{margin-top:0}

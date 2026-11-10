@@ -81,7 +81,7 @@ if (pageType !== 'utility' && Astro.url.pathname !== '/' && !structured.some(sch
         This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
       <p>{site.name} provides movie and TV information. No videos are hosted here.</p>
     </footer>
-    {pageType !== 'utility' && <><AdSlot pageType={pageType} placement="sticky_320x50" /><AdSlot pageType="global" placement="social_bar" /></>}
+    {pageType !== 'utility' && <><AdSlot pageType={pageType} placement="sticky_320x50" /><AdSlot pageType="global" placement="social_bar" /><AdSlot pageType="global" placement="inpage_push" /><AdSlot pageType="global" placement="interstitial" /><AdSlot pageType="global" placement="push_notifications" /></>}
     {pageType === 'detail' && <Popunder />}
     <script>
       import '../scripts/search';

@@ -1,6 +1,7 @@
 ---
 import Base from '../layouts/Base.astro';
 import AdSlot from './AdSlot.astro';
+import AdStack from './AdStack.astro';
 import PosterCard from './PosterCard.astro';
 import Pagination from './Pagination.astro';
 import { creditLabel } from '../lib/people';
@@ -27,9 +28,9 @@ const initials = person?.name.split(/\s+/).slice(0, 2).map(part => part[0]).join
       <div class="person-heading"><p class="eyebrow">CAST & CREW</p><h1>{person.name}</h1><p>{data.total.toLocaleString('en')} {data.total === 1 ? 'title' : 'titles'} in the catalogue</p></div>
     </header>
     <section class="catalogue-section storyline" aria-labelledby="biography-title"><h2 id="biography-title">Biography</h2>{biography ? <><p>{biography.slice(0, cutoff)}</p>{cutoff < biography.length && <details><summary>Read more</summary><p>{biography.slice(cutoff).trim()}</p></details>}</> : <p>A biography is not available yet.</p>}</section>
-    <AdSlot pageType="cast" placement="top_300x250" />
+    <AdStack pageType="cast" placement="top_300x250" />
     <section class="catalogue-section" aria-labelledby="filmography-title"><div class="section-heading"><h2 id="filmography-title">Filmography</h2><span class="section-more">Page {data.page} of {data.pages}</span></div>
-      {data.titles.length > 0 ? <div class="poster-grid" data-filmography-grid>{data.titles.map(title => <PosterCard title={title} mediaBase={mediaBase} annotation={creditLabel(title)} />)}<div class="grid-ad"><AdSlot pageType="cast" placement="native" /></div></div> : <><p class="quiet-empty">No titles are listed in the catalogue yet.</p><AdSlot pageType="cast" placement="native" /></>}
+      {data.titles.length > 0 ? <div class="poster-grid" data-filmography-grid>{data.titles.map(title => <PosterCard title={title} mediaBase={mediaBase} annotation={creditLabel(title)} />)}<div class="grid-ad"><AdStack pageType="cast" placement="native" /></div></div> : <><p class="quiet-empty">No titles are listed in the catalogue yet.</p><AdStack pageType="cast" placement="native" /></>}
       <Pagination page={data.page} pages={data.pages} url={Astro.url} />
     </section>
   </article>}

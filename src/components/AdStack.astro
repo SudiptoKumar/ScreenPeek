@@ -1,0 +1,18 @@
+---
+import AdSlot from './AdSlot.astro';
+import type { AdPage } from '../lib/ads';
+// One ad area, up to three stacked units from different networks.
+// The base unit keeps the standard rendering (including the empty
+// placeholder); the _b/_c partners are bare — they appear only when
+// a code is saved for them, so an unused partner never shows a box.
+interface Props {
+  pageType: AdPage;
+  placement: 'top_300x250' | 'native' | 'infeed';
+}
+const { pageType, placement } = Astro.props;
+const partnerB = `${placement}_b` as const;
+const partnerC = `${placement}_c` as const;
+---
+<AdSlot pageType={pageType} placement={placement} />
+<AdSlot pageType={pageType} placement={partnerB} bare />
+<AdSlot pageType={pageType} placement={partnerC} bare />

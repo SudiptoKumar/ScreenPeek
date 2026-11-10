@@ -1,6 +1,7 @@
 ---
 import Base from '../layouts/Base.astro';
 import AdSlot from './AdSlot.astro';
+import AdStack from './AdStack.astro';
 import Pagination from './Pagination.astro';
 import { episodePath } from '../lib/seasons';
 import type { SeasonPageData } from '../lib/seasons';
@@ -37,9 +38,9 @@ const formatDate = (value: string | null) => value && Number.isFinite(Date.parse
         </a>
         <header class="episode-row-heading"><p class="eyebrow">EPISODE {String(episode.episode_number).padStart(2, '0')}</p><h2><a href={href}>{episode.name || `Episode ${episode.episode_number}`}</a></h2><p class="episode-air-date">{airDate ? <time datetime={episode.air_date!}>{airDate}</time> : 'Air date to be announced'}</p></header>
         <p class="episode-summary">{overview ? `${overview.slice(0, 240)}${overview.length > 240 ? '…' : ''}` : 'An overview is not available yet.'}</p>
-      </article>{index === 1 && <div class="episode-list-ad"><AdSlot pageType="list" placement="native" /></div>}</>;
+      </article>{index === 1 && <div class="episode-list-ad"><AdStack pageType="list" placement="native" /></div>}</>;
     })}</div> : <section class="empty-state"><h2>Episode details are not available yet.</h2><p>Return to the series for its cast, storyline and watch options.</p><a class="button" href={seriesUrl}>Series details</a></section>}
-    {data.episodes.length < 2 && <AdSlot pageType="list" placement="native" />}
+    {data.episodes.length < 2 && <AdStack pageType="list" placement="native" />}
     <Pagination page={data.page} pages={data.pages} url={Astro.url} />
     <p class="episode-back"><a href={seriesUrl}>← Back to {title.title}</a></p>
   </article>}

@@ -2,6 +2,7 @@
 import { titleOriginality } from '../lib/originality';
 import Base from '../layouts/Base.astro';
 import AdSlot from './AdSlot.astro';
+import AdStack from './AdStack.astro';
 import PosterCard from './PosterCard.astro';
 import RatingStrip from './RatingStrip.astro';
 import VerdictWidget from './VerdictWidget.astro';
@@ -64,7 +65,7 @@ const gallery = parseJsonArray<string>(title?.gallery_r2).filter(key => typeof k
           const logo = mediaUrl(provider.logo_r2, mediaBase, 185);
           return <a href={watchUrl} data-no-popunder>{logo && <img src={logo} width="28" height="28" loading="lazy" decoding="async" alt="" />}<span>{provider.provider_name}</span></a>;
         })}{streamers.length > 3 && <a href={watchUrl} data-no-popunder>+{streamers.length - 3} more</a>}</div><a href={watchUrl} data-no-popunder>See streaming, rent and buy options →</a><p class="provider-credit">Streaming data by JustWatch.</p></section>}
-      <AdSlot pageType="detail" placement="top_300x250" />
+      <AdStack pageType="detail" placement="top_300x250" />
       <section class="catalogue-section" aria-label="Title information" data-detail-section="information"><dl class="title-facts"><div><dt>Type</dt><dd>{kind}</dd></div><div><dt>Language</dt><dd>{language}</dd></div><div><dt>Release date</dt><dd>{formatDate(title.release_date)}</dd></div><div><dt>{title.type === 'tv' ? 'Network / studio' : 'Studio'}</dt><dd>{title.studio || 'Not listed'}</dd></div>
         {title.type === 'movie' && title.budget !== null && title.budget > 0 && <div><dt>Budget (USD)</dt><dd>{currency(title.budget)}</dd></div>}{title.type === 'movie' && title.revenue !== null && title.revenue > 0 && <div><dt>Revenue (USD)</dt><dd>{currency(title.revenue)}</dd></div>}</dl>
         {data.genres.length > 0 && <div class="genre-chips detail-genres" aria-label="Genres">{data.genres.map(genre => <a href={`/genre/${encodeURIComponent(genre.slug)}/`}>{genre.name}</a>)}</div>}
@@ -79,7 +80,7 @@ const gallery = parseJsonArray<string>(title?.gallery_r2).filter(key => typeof k
       </section>
       <section class="catalogue-section" aria-labelledby="questions-title"><h2 id="questions-title">Questions & answers</h2>{originality.questions.map(item => <details><summary>{item.question}</summary><p>{item.answer}</p></details>)}</section>
       <VerdictWidget votes={data.votes} titleId={title.id} titleType={title.type} />
-      <AdSlot pageType="detail" placement="native" />
+      <AdStack pageType="detail" placement="native" />
       <section class="catalogue-section" aria-labelledby="gallery-title" data-detail-section="gallery"><h2 id="gallery-title">Gallery</h2>{gallery.length > 0 ? <div class="gallery-grid">{gallery.map((image, index) => <><img data-lazy-src={image} width="300" height="169" loading="lazy" decoding="async" alt={`${title.title} gallery image ${index + 1}`} /><noscript><img src={image} width="300" height="169" loading="lazy" decoding="async" alt={`${title.title} gallery image ${index + 1}`} /></noscript></>)}</div> : <p class="quiet-empty">No gallery images are available yet.</p>}</section>
       {title.type === 'tv' && <section class="catalogue-section" aria-labelledby="seasons-title" data-detail-section="seasons"><h2 id="seasons-title">Seasons</h2>{data.seasons.length > 0 ? <ul class="season-links">{data.seasons.map(season => <li><a href={`/tv/${encodeURIComponent(title.slug)}/season/${season.season_number}/`}><strong>{season.name || `Season ${season.season_number}`}</strong><span>{season.episode_count} episodes</span><small>{formatDate(season.air_date)}</small><span aria-hidden="true">→</span></a></li>)}</ul> : <p class="quiet-empty">Season information is not available yet.</p>}</section>}
       <section class="catalogue-section" aria-labelledby="similar-title" data-detail-section="similar"><h2 id="similar-title">More Like This</h2>{data.similar.length > 0 ? <div class="poster-grid">{data.similar.map(similar => <PosterCard title={similar} mediaBase={mediaBase} />)}</div> : <p class="quiet-empty">Similar titles will appear as the catalogue grows.</p>}</section>

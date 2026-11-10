@@ -2,6 +2,7 @@
 import { env } from 'cloudflare:workers';
 import Base from '../../layouts/Base.astro';
 import AdSlot from '../../components/AdSlot.astro';
+import AdStack from '../../components/AdStack.astro';
 import ProviderRow from '../../components/ProviderRow.astro';
 import { loadWatchPage } from '../../lib/watch';
 import { countryCookie, countryNames, supportedCountries } from '../../lib/geo';
@@ -29,6 +30,6 @@ const groups = [{ name: 'Stream', values: ['stream'] }, { name: 'Free', values: 
     })}</div> : <section class="empty-state"><h2>Not available to stream in {name} yet.</h2><p>Availability can change. Check another country below.</p></section>}
     <p class="provider-credit">Streaming data by JustWatch.</p>
     {data.availableCountries.length > 0 && <p class="available-countries">Available in: {data.availableCountries.map(country => <a href={`?country=${country}`}>{countryNames[country]}</a>)}</p>}
-    <AdSlot pageType="watch" placement="top_300x250" /><AdSlot pageType="watch" placement="native" />
+    <AdStack pageType="watch" placement="top_300x250" /><AdStack pageType="watch" placement="native" />
   </article>}
 </Base>

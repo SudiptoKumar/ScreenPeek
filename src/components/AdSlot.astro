@@ -4,18 +4,26 @@ import { requestAds } from '../lib/ads';
 import type { AdPage } from '../lib/ads';
 interface Props {
   pageType: AdPage;
-  placement: 'top_300x250' | 'sticky_320x50' | 'native' | 'infeed' | 'social_bar';
+  placement: 'top_300x250' | 'top_300x250_b' | 'top_300x250_c' | 'sticky_320x50' | 'native' | 'native_b' | 'native_c' | 'infeed' | 'infeed_b' | 'infeed_c' | 'social_bar' | 'inpage_push' | 'interstitial' | 'push_notifications';
+  // bare: a stacked partner unit — renders nothing at all unless filled,
+  // so an unused partner never leaves an empty placeholder box.
+  bare?: boolean;
 }
-const { placement, pageType } = Astro.props;
-const dimensions = {
+const { placement, pageType, bare = false } = Astro.props;
+const basePlacement = placement.replace(/_[bc]$/, '');
+const dimensions: Record<string, [number, number]> = {
   top_300x250: [300, 250], sticky_320x50: [320, 50],
   native: [300, 250], infeed: [300, 250], social_bar: [0, 0],
-}[placement];
+  inpage_push: [0, 0], interstitial: [0, 0], push_notifications: [0, 0],
+};
+const [adWidth, adHeight] = dimensions[basePlacement] || [300, 250];
+const scriptOnly = ['social_bar', 'inpage_push', 'interstitial', 'push_notifications'].includes(basePlacement);
 const slot = await requestAds(Astro.locals, env).resolve(pageType, placement);
 ---
-{placement === 'social_bar' ? (slot && <div data-ad-page={pageType} data-placement={placement} aria-label="Advertisement" set:html={slot.code} />) :
-<aside class:list={['ad-slot', { 'ad-sticky': placement === 'sticky_320x50', 'ad-filled': !!slot }]}
-  style={`--ad-width:${dimensions[0]}px;--ad-height:${dimensions[1]}px`}
+{scriptOnly ? (slot && <div data-ad-page={pageType} data-placement={placement} aria-label="Advertisement" set:html={slot.code} />) :
+bare && !slot ? null :
+<aside class:list={['ad-slot', { 'ad-sticky': basePlacement === 'sticky_320x50', 'ad-filled': !!slot }]}
+  style={`--ad-width:${adWidth}px;--ad-height:${adHeight}px`}
   aria-label={slot ? 'Advertisement' : 'Advertisement placeholder'} data-placement={placement} data-ad-page={pageType} data-ad-state={slot ? 'filled' : 'placeholder'}>
   {slot ? <Fragment set:html={slot.code} /> : <span>Advertisement · placeholder</span>}
 </aside>}

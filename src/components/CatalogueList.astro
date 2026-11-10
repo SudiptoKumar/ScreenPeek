@@ -4,6 +4,7 @@ import Base from '../layouts/Base.astro';
 import PosterCard from './PosterCard.astro';
 import Pagination from './Pagination.astro';
 import AdSlot from './AdSlot.astro';
+import AdStack from './AdStack.astro';
 import type { CataloguePageData } from '../lib/catalogue-page';
 import { itemListSchema, siteOrigin } from '../lib/seo';
 import { env } from 'cloudflare:workers';
@@ -30,8 +31,8 @@ const { type, label, filters, catalogue, options, sample, failed, missing, filte
     <div class="results-heading"><p><strong>{catalogue.total.toLocaleString('en')}</strong> {type === 'movie' ? 'movies' : 'series'}</p><p>Page {catalogue.page} of {catalogue.pages}</p></div>
     {catalogue.titles.length ? <>
       <div class="poster-grid" data-catalogue-grid>
-        {catalogue.titles.map((title, index) => <><PosterCard title={title} mediaBase={mediaBase} eager={index < 3} />{index === 11 && catalogue.titles.length > 12 && <div class="grid-infeed"><AdSlot pageType="list" placement="infeed" /></div>}</>)}
-        <div class="grid-ad"><AdSlot pageType="list" placement="native" /></div>
+        {catalogue.titles.map((title, index) => <><PosterCard title={title} mediaBase={mediaBase} eager={index < 3} />{index === 11 && catalogue.titles.length > 12 && <div class="grid-infeed"><AdStack pageType="list" placement="infeed" /></div>}</>)}
+        <div class="grid-ad"><AdStack pageType="list" placement="native" /></div>
       </div>
       <Pagination page={catalogue.page} pages={catalogue.pages} url={Astro.url} />
     </> : <section class="empty-state"><h2>No matching titles yet.</h2><p>Try another genre, year or rating.</p><a class="button" href={base}>Clear filters</a></section>}

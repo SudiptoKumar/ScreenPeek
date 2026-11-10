@@ -13,7 +13,7 @@ import { httpsDestination } from '../links.ts';
 import { trustSlugs } from '../trust.ts';
 
 export const settingsFields = {
-  ads_display_enabled: 'Display ads', ads_native_enabled: 'Native ads', ads_sticky_enabled: 'Sticky ads', ads_social_enabled: 'Social Bar', ads_popunder_enabled: 'Popunder', ads_txt: 'ads.txt',
+  ads_display_enabled: 'Display ads', ads_native_enabled: 'Native ads', ads_sticky_enabled: 'Sticky ads', ads_social_enabled: 'Social Bar', ads_popunder_enabled: 'Popunder', ads_push_enabled: 'In-Page Push ads', ads_interstitial_enabled: 'Vignette / Interstitial ads', ads_notifications_enabled: 'Push Notification ads', ads_txt: 'ads.txt',
   static_top_n: 'Prebuilt top titles', site_name: 'Site name', site_tagline: 'Tagline', ads_enabled: 'Master ads switch', popunder_cap_hours: 'Popunder cap (hours)',
   cache_ttl_list: 'List cache TTL (seconds)', cache_ttl_detail: 'Detail cache TTL (seconds)',
   maintenance: 'Maintenance mode', ratings_external: 'Show cached external ratings', sync_popularity_gate: 'Sync popularity gate', sync_max_titles: 'Max titles per sync',

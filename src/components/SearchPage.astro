@@ -3,6 +3,7 @@ import Base from '../layouts/Base.astro';
 import PosterCard from './PosterCard.astro';
 import Pagination from './Pagination.astro';
 import AdSlot from './AdSlot.astro';
+import AdStack from './AdStack.astro';
 import type { SearchPageData } from '../lib/search';
 import { itemListSchema, siteOrigin } from '../lib/seo';
 import { env } from 'cloudflare:workers';
@@ -33,7 +34,7 @@ const ratings = [...new Set([6, 7, 8, 9, ...(filters.minRating === undefined ? [
     {!available ? <section class="empty-state"><h2>{data.status === 503 ? 'Search is temporarily unavailable.' : data.status === 400 ? 'Use a search query of up to 100 characters.' : 'That results page could not be found.'}</h2><p>{data.status === 503 ? 'Please try again shortly.' : 'Adjust your search above or return to the first results page.'}</p>{data.status === 404 && <a class="button" href={`/search/?${firstPage.toString()}`}>First results page</a>}</section> : !searching ?
       <section class="empty-state"><h2>What would you like to find?</h2><p>Enter at least two characters to search movies and series.</p></section> : <>
       <div class="results-heading"><p><strong>{catalogue.total.toLocaleString('en')}</strong> {catalogue.total === 1 ? 'result' : 'results'} for <span class="query-label">“{data.query}”</span></p><p>Page {catalogue.page} of {catalogue.pages}</p></div>
-      {catalogue.titles.length ? <><div class="poster-grid" data-catalogue-grid>{catalogue.titles.map((title, index) => <PosterCard title={title} mediaBase={mediaBase} eager={index < 3} />)}<div class="grid-ad"><AdSlot pageType="search" placement="native" /></div></div><Pagination page={catalogue.page} pages={catalogue.pages} url={Astro.url} /></> :
+      {catalogue.titles.length ? <><div class="poster-grid" data-catalogue-grid>{catalogue.titles.map((title, index) => <PosterCard title={title} mediaBase={mediaBase} eager={index < 3} />)}<div class="grid-ad"><AdStack pageType="search" placement="native" /></div></div><Pagination page={catalogue.page} pages={catalogue.pages} url={Astro.url} /></> :
         <section class="empty-state"><h2>No matching titles.</h2><p>Try another title or fewer filters.</p><a class="button" href={`/search/?q=${encodeURIComponent(data.query)}`}>Clear filters</a></section>}
     </>}
   </article>

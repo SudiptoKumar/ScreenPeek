@@ -1,6 +1,7 @@
 ---
 import Base from '../layouts/Base.astro';
 import AdSlot from './AdSlot.astro';
+import AdStack from './AdStack.astro';
 import PosterCard from './PosterCard.astro';
 import Pagination from './Pagination.astro';
 import type { HubKind, HubPageData } from '../lib/hubs';
@@ -41,9 +42,9 @@ const grouped = [...months.values()];
     <div class="results-heading"><p><strong>{data.catalogue.total.toLocaleString('en')}</strong> {data.catalogue.total === 1 ? 'title' : 'titles'}</p><p>Page {data.catalogue.page} of {data.catalogue.pages}</p></div>
     {data.catalogue.titles.length === 0 ? <section class="empty-state"><h2>No titles are listed here yet.</h2><p>Explore movies and series while the catalogue grows.</p><a class="button" href="/movies/">Browse movies</a><a class="button" href="/series/">Browse series</a></section> : data.kind === 'top10' ? <>
       <ol class="ranked-list hub-ranking">{data.catalogue.titles.slice(0, 10).map((title, index) => <li data-ranked-title><a href={titleUrl(title)}><span class="rank-number" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span><span class="rank-title"><strong>{title.title}</strong><small>{title.year ?? 'Year TBA'} · {title.type === 'movie' ? 'Movie' : 'TV series'}</small></span><span class="rank-score"><small>TMDb</small><strong>{rating(title.vote_average)}</strong></span></a></li>)}</ol>
-      <AdSlot pageType="list" placement="native" />
-    </> : data.kind === 'upcoming' ? grouped.map((group, groupIndex) => <section class="release-month" aria-labelledby={`month-${group.key}`} data-release-month={group.key}><h2 id={`month-${group.key}`}>{group.label}</h2><div class="poster-grid" data-catalogue-grid>{group.titles.map((title, index) => <><PosterCard title={title} mediaBase={mediaBase} eager={groupIndex === 0 && index < 3} />{index + grouped.slice(0, groupIndex).reduce((count, previous) => count + previous.titles.length, 0) === 11 && data.catalogue.titles.length > 12 && <div class="grid-infeed"><AdSlot pageType="list" placement="infeed" /></div>}</>)}{groupIndex === 0 && <div class="grid-ad"><AdSlot pageType="list" placement="native" /></div>}</div></section>) :
-      <div class="poster-grid" data-catalogue-grid>{data.catalogue.titles.map((title, index) => <><PosterCard title={title} mediaBase={mediaBase} eager={index < 3} />{index === 11 && data.catalogue.titles.length > 12 && <div class="grid-infeed"><AdSlot pageType="list" placement="infeed" /></div>}</>)}<div class="grid-ad"><AdSlot pageType="list" placement="native" /></div></div>}
+      <AdStack pageType="list" placement="native" />
+    </> : data.kind === 'upcoming' ? grouped.map((group, groupIndex) => <section class="release-month" aria-labelledby={`month-${group.key}`} data-release-month={group.key}><h2 id={`month-${group.key}`}>{group.label}</h2><div class="poster-grid" data-catalogue-grid>{group.titles.map((title, index) => <><PosterCard title={title} mediaBase={mediaBase} eager={groupIndex === 0 && index < 3} />{index + grouped.slice(0, groupIndex).reduce((count, previous) => count + previous.titles.length, 0) === 11 && data.catalogue.titles.length > 12 && <div class="grid-infeed"><AdStack pageType="list" placement="infeed" /></div>}</>)}{groupIndex === 0 && <div class="grid-ad"><AdStack pageType="list" placement="native" /></div>}</div></section>) :
+      <div class="poster-grid" data-catalogue-grid>{data.catalogue.titles.map((title, index) => <><PosterCard title={title} mediaBase={mediaBase} eager={index < 3} />{index === 11 && data.catalogue.titles.length > 12 && <div class="grid-infeed"><AdStack pageType="list" placement="infeed" /></div>}</>)}<div class="grid-ad"><AdStack pageType="list" placement="native" /></div></div>}
     <Pagination page={data.catalogue.page} pages={data.catalogue.pages} url={Astro.url} />
   </article>}
 </Base>

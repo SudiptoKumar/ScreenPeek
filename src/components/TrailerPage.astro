@@ -1,6 +1,7 @@
 ---
 import Base from '../layouts/Base.astro';
 import AdSlot from './AdSlot.astro';
+import AdStack from './AdStack.astro';
 import PosterCard from './PosterCard.astro';
 import type { TrailerPageData } from '../lib/trailer';
 import { mediaUrl } from '../lib/media';
@@ -45,7 +46,7 @@ const overview = title?.overview?.trim() || '';
         });
       </script>
     </> : <section class="trailer-unavailable"><h2>No trailer is available yet.</h2><p>Explore the title’s details, cast and legal watch options below.</p></section>}
-    <AdSlot pageType="trailer" placement="top_300x250" />
+    <AdStack pageType="trailer" placement="top_300x250" />
     <section class="catalogue-section storyline"><h2>About {title.title}</h2><p>{overview ? `${overview.slice(0, 360)}${overview.length > 360 ? '…' : ''}` : 'A summary is not available yet.'}</p><div class="detail-actions"><a class="button" href={detailUrl}>Full title details</a><a class="button primary" href={`/watch/${encodeURIComponent(title.slug)}/`}>Where to Watch →</a></div></section>
     <section class="catalogue-section" aria-labelledby="trailer-similar-title"><h2 id="trailer-similar-title">More Like This</h2>{data.similar.length > 0 ? <div class="poster-grid">{data.similar.slice(0, 12).map(similar => <PosterCard title={similar} mediaBase={mediaBase} />)}</div> : <p class="quiet-empty">Similar titles will appear as the catalogue grows.</p>}</section>
   </article>}

@@ -1,6 +1,7 @@
 ---
 import Base from '../layouts/Base.astro';
 import AdSlot from './AdSlot.astro';
+import AdStack from './AdStack.astro';
 import { seasonPath, episodePath } from '../lib/seasons';
 import type { EpisodePageData } from '../lib/seasons';
 import { mediaUrl } from '../lib/media';
@@ -29,7 +30,7 @@ const airDate = episode?.air_date && Number.isFinite(Date.parse(episode.air_date
     <div class="detail-actions season-actions"><a class="button primary" href={seasonUrl}>All episodes</a><a class="button" href={`/watch/${encodeURIComponent(title.slug)}/`}>Where to Watch →</a><a class="button" href={`/trailer/${encodeURIComponent(title.slug)}/`}>Series trailer</a></div>
     {still && <figure class="episode-feature"><img src={still} width="185" height="104" loading="eager" fetchpriority="high" decoding="async" alt={`${episodeName} still`} /></figure>}
     <section class="catalogue-section storyline"><h2>Episode overview</h2><p>{episode.overview?.trim() || 'An overview is not available yet.'}</p></section>
-    <AdSlot pageType="list" placement="native" />
+    <AdStack pageType="list" placement="native" />
     {(data.previous || data.next) && <nav class="episode-navigation" aria-label="Episode navigation">
       {data.previous && <a href={episodePath(title.slug, season.season_number, data.previous.episode_number)} rel="prev"><small>← Previous episode</small><strong>Episode {data.previous.episode_number}</strong><span>{data.previous.name || 'Episode details'}</span></a>}
       {data.next && <a class="episode-next" href={episodePath(title.slug, season.season_number, data.next.episode_number)} rel="next"><small>Next episode →</small><strong>Episode {data.next.episode_number}</strong><span>{data.next.name || 'Episode details'}</span></a>}
