@@ -6,7 +6,7 @@ export interface HealthIssue { key:string;severity:'error'|'warning'|'info';mess
 export async function healthReport(env:AdminEnvironment,actor:AdminIdentity):Promise<HealthIssue[]>{
  requirePermission(actor,'dashboard');const issues:HealthIssue[]=[];
  const latest=await env.DB.prepare('SELECT id,status FROM sync_log ORDER BY id DESC LIMIT 1').first<{id:number;status:string}>();
- if(!latest||['failed','partial'].includes(latest.status))issues.push({key:'sync',severity:latest?'error':'info',message:latest?`Latest sync is ${latest.status}.`:'No sync recorded.',fix:'/admin/sync/'});
+ if(!latest||['failed','partial'].includes(latest.status))issues.push({key:'sync',severity:latest?(latest.status==='failed'?'error':'warning'):'info',message:latest?`Latest sync is ${latest.status}.`:'No sync recorded.',fix:'/admin/sync/'});
  if(permitted(actor,'titles')&&permitted(actor,'content')){
   const rows=(await env.DB.prepare("SELECT id,type,title,poster_r2,overview FROM titles WHERE hidden=0 AND deleted=0 AND deleted_at IS NULL AND (poster_r2 IS NULL OR trim(poster_r2)='' OR overview IS NULL OR length(trim(overview))<80) ORDER BY id LIMIT 1000").all<{id:number;type:string;title:string;poster_r2:string|null;overview:string|null}>()).results;
   for(const row of rows){const fix='/admin/content/?'+new URLSearchParams({list:'titles',u_edit:JSON.stringify([row.id,row.type])});if(!row.poster_r2?.trim())issues.push({key:`poster:${row.type}:${row.id}`,severity:'warning',message:`Missing poster: ${row.title}`,fix});if(!row.overview||row.overview.trim().length<80)issues.push({key:`overview:${row.type}:${row.id}`,severity:'warning',message:`Missing or short overview: ${row.title}`,fix});}

@@ -52,7 +52,13 @@ export async function runSync(options: {
     const people = new Map((await db.query<PersonState>('SELECT id,slug,bio,profile_r2,locked_fields,deleted_at FROM people')).map(row => [row.id, row]));
     const blockedRows = await db.query<{ tmdb_id: number; type: string }>('SELECT tmdb_id,type FROM blocklist');
     const blocked = new Set(blockedRows.map(row => `${row.type}:${row.tmdb_id}`));
-    const last = await db.query<{ finished_at: string }>("SELECT finished_at FROM sync_log WHERE status='ok' AND finished_at IS NOT NULL ORDER BY id DESC LIMIT 1");
+    // The changes window advances on any COMPLETED run (ok or partial):
+    // a partial run still collected its window, and everything it could
+    // not process is preserved in sync_queue. Keying the window to 'ok'
+    // only deadlocked the sync — every run re-collected the same growing
+    // window, deferred the same titles again, and stayed partial forever.
+    // A failed run collected nothing reliably, so it never advances it.
+    const last = await db.query<{ finished_at: string }>("SELECT finished_at FROM sync_log WHERE status IN ('ok','partial') AND finished_at IS NOT NULL ORDER BY id DESC LIMIT 1");
     const collected = options.targets || options.personIds ? { titles: options.targets || [], personIds: options.personIds || [], needsReconciliation: false }
       : await collectCandidates(client, { now, lastSuccess: last[0]?.finished_at });
     if (collected.needsReconciliation) warn('Changes recovery window exceeded 14 days; run manual reconciliation.');
@@ -73,11 +79,14 @@ export async function runSync(options: {
       maxTitles: options.maxTitles ?? Math.min(2000, Number(config.sync_max_titles || 2000)), popularityGate: manual ? 0 : threshold });
     const usedSlugs = new Set([...existing.values()].map(row => row.slug));
     const usedPeopleSlugs = new Set([...people.values()].map(row => row.slug));
-    const work = await prepareCandidates(client, filtered.selected, { existing, now, usedSlugs, popularityGate: threshold, forceImport: manual });
+    // Prepare gets the first half of the run's clock; the persist phase
+    // keeps the second half. Without a deadline, preparing a large
+    // selection consumed the whole budget and zero titles were stored.
+    const work = await prepareCandidates(client, filtered.selected, { existing, now, usedSlugs, popularityGate: threshold, forceImport: manual, deadlineMs: start + Math.floor(duration / 2) });
     const changedPeople = new Set([...collected.personIds, ...(options.personIds || [])]);
     const processedPeople = new Set<number>();
     const providerLogos = new Map<number, string | null>();
-    const deferred = [...filtered.deferred];
+    const deferred = [...filtered.deferred, ...work.remaining];
     for (const failure of work.failures) {
       warn(`${failure.candidate.type}:${failure.candidate.id}: ${failure.message}`);
       if (failure.status === 404) {
@@ -184,9 +193,14 @@ export async function runSync(options: {
     }
     await purgeExpiredTrash({query:db.query.bind(db),batch:async statements=>{const result=await db.batch(statements);rowsWritten+=result.rowsWritten;return result;}},clock(),Math.min(1000,Math.max(0,Math.floor((budget-rowsWritten)/10))));
     // Small transactional chunks keep each request within D1 API limits.
-    for (let offset = 0; offset < deferred.length; offset += 100) {
+    // Candidates already sitting in the queue keep their row untouched —
+    // rewriting ~20k identical queue rows every night would burn most of
+    // the daily D1 write budget on no-ops.
+    const alreadyQueued = new Set(queued.map(candidate => titleKey(candidate.type, candidate.id)));
+    const toQueue = deferred.filter(candidate => !alreadyQueued.has(titleKey(candidate.type, candidate.id)));
+    for (let offset = 0; offset < toQueue.length; offset += 100) {
       if (rowsWritten >= 80_000) { warn('Queue write safety cap reached; catch-up window remains open.'); break; }
-      await batch(deferred.slice(offset, offset + 100).map(candidate => ({
+      await batch(toQueue.slice(offset, offset + 100).map(candidate => ({
         sql: 'INSERT INTO sync_queue(title_id,title_type,candidate,queued_at) VALUES(?,?,?,?) ON CONFLICT(title_id,title_type) DO UPDATE SET candidate=excluded.candidate',
         params: [candidate.id, candidate.type, JSON.stringify(candidate), now.toISOString()],
       })));

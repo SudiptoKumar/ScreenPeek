@@ -11,11 +11,20 @@ export async function prepareCandidates(client: Pick<TmdbClient, 'details'>, can
   now: Date; existing: Map<string, ExistingTitleState>; usedSlugs: Set<string>;
   popularityGate?: number;
   forceImport?: boolean;
+  deadlineMs?: number;
 }) {
   const prepared: PreparedTitle[] = [];
   const failures: Array<{ candidate: Candidate; status?: number; message: string }> = [];
   const skipped: Array<{ candidate: Candidate; reason: string }> = [];
+  const remaining: Candidate[] = [];
   for (let start = 0; start < candidates.length; start += 5) {
+    // Past the deadline, stop fetching: the unprepared candidates are
+    // returned as `remaining` so the caller can defer them to the queue
+    // and spend the rest of the run actually storing what is prepared.
+    if (options.deadlineMs !== undefined && performance.now() >= options.deadlineMs) {
+      remaining.push(...candidates.slice(start));
+      break;
+    }
     const wave = candidates.slice(start, start + 5);
     const results = await Promise.allSettled(wave.map(candidate => client.details<SourceDetails>(candidate.type, candidate.id)));
     for (const [index, result] of results.entries()) {
@@ -41,5 +50,5 @@ export async function prepareCandidates(client: Pick<TmdbClient, 'details'>, can
       }
     }
   }
-  return { prepared, failures, skipped };
+  return { prepared, failures, skipped, remaining };
 }
