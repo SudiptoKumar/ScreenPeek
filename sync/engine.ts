@@ -134,8 +134,9 @@ export async function runSync(options: {
       }
       const { candidate, data } = prepared;
       const previous = existing.get(titleKey(candidate.type, candidate.id));
+      const overTime = () => performance.now() - start >= duration;
       try {
-        for (const person of data.people) await syncPerson(person);
+        for (const person of data.people) { if (overTime()) throw new Error('Sync deadline reached'); await syncPerson(person); }
         data.credits = data.credits.filter(credit => !blocked.has(`person:${credit.person_id}`) && !people.get(credit.person_id)?.deleted_at);
         const locks = parseArray(previous?.locked_fields || '[]');
         if(locks.length)console.info(`Kept manual edit fields for ${candidate.type}:${candidate.id}: ${locks.filter(field=>typeof field==='string'&&/^[a-z_]{1,40}$/.test(field)).join(', ')}`);
@@ -167,28 +168,36 @@ export async function runSync(options: {
           } catch { warn(`${candidate.type}:${candidate.id}: sharing card generation failed.`); }
         }
         for (const season of data.seasons) {
+          if (overTime()) throw new Error('Sync deadline reached');
           if (season.episode_count < 1) continue;
           const stored = await db.query<{ count: number }>('SELECT COUNT(*) AS count FROM episodes WHERE title_id=? AND season_number=?', [candidate.id, season.season_number]);
           if (!candidate.changed && stored[0]?.count === season.episode_count) continue;
           try {
             const details = await client.season<SeasonPayload>(candidate.id, season.season_number);
             if (!Array.isArray(details.episodes)) throw new Error('Invalid season payload');
+            const existingEpisodes = new Map((await db.query<{ episode_number: number; name: string; air_date: string | null; still_r2: string | null }>('SELECT episode_number,name,air_date,still_r2 FROM episodes WHERE title_id=? AND season_number=?', [candidate.id, season.season_number])).map(row => [row.episode_number, row]));
             for (const episode of details.episodes || []) {
+              if (overTime()) throw new Error('Sync deadline reached');
               if (!Number.isSafeInteger(episode.episode_number) || episode.episode_number < 1) continue;
-              const still = await processImage(client, images, { kind: 'still', id: candidate.id, mediaType: 'tv', path: episode.still_path });
+              const priorEpisode = existingEpisodes.get(episode.episode_number);
+              if (priorEpisode && priorEpisode.still_r2 && priorEpisode.name === (episode.name || '') && (priorEpisode.air_date || null) === (episode.air_date || null)) continue;
+              const still = priorEpisode?.still_r2 ? { keys: { '185': priorEpisode.still_r2 as string }, warning: null } : await processImage(client, images, { kind: 'still', id: candidate.id, mediaType: 'tv', path: episode.still_path });
               if (still.warning) warn(still.warning);
               await batch([{ sql: `INSERT INTO episodes(title_id,season_number,episode_number,name,overview,air_date,still_r2)
                 SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM titles WHERE id=? AND type='tv' AND deleted=0 AND deleted_at IS NULL)
                 ON CONFLICT(title_id,season_number,episode_number) DO UPDATE SET name=excluded.name,overview=excluded.overview,air_date=excluded.air_date,still_r2=excluded.still_r2`,
                 params: [candidate.id, season.season_number, episode.episode_number, episode.name || '', episode.overview || '', episode.air_date || null, still.keys['185'] || null, candidate.id] }]);
             }
-          } catch { warn(`TV ${candidate.id}, season ${season.season_number}: episode refresh failed.`); }
+          } catch (error) { if (overTime()) throw error; warn(`TV ${candidate.id}, season ${season.season_number}: episode refresh failed.`); }
         }
         await batch([{ sql: 'DELETE FROM sync_queue WHERE title_id=? AND title_type=?', params: [candidate.id, candidate.type] }]);
         if (previous) summary.updated++; else summary.added++;
-      } catch {
-        warn(`${candidate.type}:${candidate.id}: persistence failed; candidate retained for retry.`);
+      } catch (error) {
         deferred.push(candidate);
+        // A deadline stop mid-title is a deferral, not a failure: the
+        // title keeps its queue row and resumes next run (every episode
+        // and image already saved stays saved).
+        if (!overTime()) warn(`${candidate.type}:${candidate.id}: persistence failed; candidate retained for retry.`);
       }
     }
     await purgeExpiredTrash({query:db.query.bind(db),batch:async statements=>{const result=await db.batch(statements);rowsWritten+=result.rowsWritten;return result;}},clock(),Math.min(1000,Math.max(0,Math.floor((budget-rowsWritten)/10))));
@@ -214,14 +223,17 @@ export async function runSync(options: {
       { sql: 'DELETE FROM admin_log WHERE id NOT IN (SELECT id FROM admin_log ORDER BY id DESC LIMIT 500)' },
     ]);
     summary.status = summary.errors.length ? 'partial' : 'ok';
-  } catch {
+  } catch (error) {
+    // Raw upstream errors stay out of the summary (they can carry URLs
+    // and tokens); the detail goes to the server log only.
+    console.error('Sync infrastructure failure:', error);
     warn('Sync stopped after an infrastructure or source failure; existing catalogue data was retained.');
     summary.status = 'failed';
   }
   summary.finishedAt = clock().toISOString();
   if (logId) {
     try { await finishSyncLog(db, logId, summary); }
-    catch { summary.status = 'failed'; warn('Could not finalize the sync log.'); }
+    catch (error) { console.error('Sync log finalize failure:', error); summary.status = 'failed'; warn('Could not finalize the sync log.'); }
   }
   const alert = await notifyFailure(options.environment || {}, summary);
   if (alert.warning) {
