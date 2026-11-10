@@ -29,6 +29,6 @@ declare namespace App {
     adTestAuthorized?: boolean;
     admin?: import('./lib/admin/access').AdminIdentity;
     adminFailure?: { status: number; message: string };
-    siteConfig?: Promise<{ name: string; tagline: string; logo: string | null; google?: string | null; bing?: string | null; socials: Array<{ slug: string; name: string }> }>;
+    siteConfig?: Promise<{ name: string; tagline: string; logo: string | null; google?: string | null; bing?: string | null; socials: Array<{ slug: string; name: string }>; cacheTtlList: number; cacheTtlDetail: number }>;
   }
 }

@@ -1,0 +1,44 @@
+---
+import { permitted } from '../../lib/admin/access';
+import type { AdminIdentity } from '../../lib/admin/access';
+import type { AdminData } from '../../lib/admin/data';
+import { countryNames } from '../../lib/geo';
+interface Props { actor: AdminIdentity; data?: AdminData; }
+const { actor, data } = Astro.props;
+const write = permitted(actor, 'tools', true);
+const results = data?.tools;
+const preview = Astro.cookies.get('sp_preview_country')?.value || '';
+const frame = Astro.url.searchParams.get('frame') === 'full' ? 'full' : '360';
+const enc = encodeURIComponent;
+---
+<section class="catalogue-section"><h2>Global search</h2>
+  <form class="admin-search" method="get"><label>Search titles, people, links, pages and redirects<input name="q" value={data?.query || ''} maxlength="100" /></label><button type="submit">Search</button>{data?.query && <a href="/admin/tools/">Clear</a>}</form>
+  {results && results.query.length >= 2 && <>
+    <h3>Titles</h3>
+    {results.titles.length === 0 ? <p>No titles matched.</p> : <ul>{results.titles.map(row => <li><a href={`/admin/content/?q=${enc(row.title)}`}>{row.title}</a> · {row.type} · <a href={`/${row.type === 'movie' ? 'movie' : 'tv'}/${row.slug}/`}>view page</a>{row.hidden ? ' · Hidden' : ''}{row.deleted ? ' · Deleted (410)' : ''}</li>)}</ul>}
+    <h3>People</h3>
+    {results.people.length === 0 ? <p>No people matched.</p> : <ul>{results.people.map(row => <li><a href={`/admin/people/?q=${enc(row.name)}`}>{row.name}</a> · <a href={`/cast/${row.slug}/`}>view page</a></li>)}</ul>}
+    <h3>Links</h3>
+    {results.links.length === 0 ? <p>No links matched.</p> : <ul>{results.links.map(row => <li><a href={`/admin/links/?edit=${enc(row.slug)}`}>{row.name}</a> · {row.type} · {row.enabled ? 'On' : 'Off'}</li>)}</ul>}
+    <h3>Pages</h3>
+    {results.pages.length === 0 ? <p>No pages matched.</p> : <ul>{results.pages.map(row => <li><a href={`/admin/pages/?edit=${enc(row.slug)}`}>{row.title || row.slug}</a> · /{row.slug}/</li>)}</ul>}
+    <h3>Redirects</h3>
+    {results.redirects.length === 0 ? <p>No redirects matched.</p> : <ul>{results.redirects.map(row => <li><a href={`/admin/seo/?q=${enc(row.from_path)}`}>{row.from_path}</a> → {row.to_target} · {row.type}</li>)}</ul>}
+  </>}
+  {results && results.query.length === 1 && <p>Type at least 2 characters to search.</p>}
+</section>
+<section class="catalogue-section"><h2>Preview as visitor</h2>
+  <p>{preview ? `Preview mode is ON in this browser: you are browsing the public site as a visitor from ${preview} (${countryNames[preview] || preview}). Public pages show a preview banner while it is on.` : 'Preview mode is off. Pick a country to browse the public site exactly as a visitor from that country sees it, including their streaming providers.'}</p>
+  <nav class="hub-navigation" aria-label="Preview country">{['US', 'GB', 'CA', 'AU'].map(country => <a href={`/admin/tools/?preview=${country}`} aria-current={preview === country ? 'true' : undefined}>{country}{preview === country ? ' ✓' : ''}</a>)}<a href="/admin/tools/?preview=off">Turn off</a></nav>
+  <nav class="hub-navigation" aria-label="Preview device width"><a href="/admin/tools/?frame=360" aria-current={frame === '360' ? 'true' : undefined}>Phone frame (360px)</a><a href="/admin/tools/?frame=full" aria-current={frame === 'full' ? 'true' : undefined}>Full width</a></nav>
+  <iframe src="/" title="Public site preview" loading="lazy" style={`width:${frame === 'full' ? '100%' : '360px'};height:640px;border:1px solid #8884;max-width:100%`}></iframe>
+</section>
+<section class="catalogue-section"><h2>Run a job</h2>
+  <p>Jobs run in GitHub Actions. The repository enable switches still decide whether a dispatched job actually executes, and the run link appears here after dispatch.</p>
+  <form method="post"><input type="hidden" name="action" value="run-job" /><input type="hidden" name="job" value="nightly" /><fieldset disabled={!write}><button class="primary" type="submit">Run daily sync now</button></fieldset></form>
+  <form method="post"><input type="hidden" name="action" value="run-job" /><input type="hidden" name="job" value="backup" /><fieldset disabled={!write}><button type="submit">Run private backup now</button></fieldset></form>
+</section>
+<section class="catalogue-section"><h2>Purge cache</h2>
+  <form class="admin-form" method="post"><input type="hidden" name="action" value="purge-cache" /><fieldset disabled={!write}><label>URL to purge (leave empty to purge everything)<input name="url" type="url" maxlength="2048" placeholder="https://your-domain/movie/a-title/" /></label><button type="submit">Purge cache</button></fieldset></form>
+  <p>A purge refreshes edge-cached and server-rendered pages. Static pages are files and still update on the next build.</p>
+</section>

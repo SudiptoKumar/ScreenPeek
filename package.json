@@ -30,7 +30,7 @@
     "test:redirects": "node scripts/tool.mjs node --test tests/redirects.test.ts",
     "test:votes": "node scripts/tool.mjs node --test tests/votes.test.ts",
     "test:ads": "node scripts/tool.mjs node --test tests/ads.test.ts",
-    "test:admin": "node scripts/tool.mjs node --test tests/admin.test.ts tests/admin-v2.test.ts tests/universal.test.ts tests/restore.test.ts tests/health.test.ts tests/metadata.test.ts",
+    "test:admin": "node scripts/tool.mjs node --test tests/admin.test.ts tests/admin-v2.test.ts tests/universal.test.ts tests/restore.test.ts tests/health.test.ts tests/metadata.test.ts tests/tools.test.ts",
     "test:trust": "node scripts/tool.mjs node --test tests/trust.test.ts",
     "test:seo": "node scripts/tool.mjs node --test tests/seo.test.ts",
     "test:deploy": "node --test tests/deploy.test.mjs",

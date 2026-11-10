@@ -5,7 +5,7 @@ import { universalAction } from './universal.ts';
 import { advancedAction } from './advanced.ts';
 import { AdminError, requirePermission } from './access.ts';
 import type { AdminIdentity, AdminModule } from './access.ts';
-import { commitChange, deliverChange, dispatchSync, savedMessage } from './changes.ts';
+import { commitChange, deliverChange, dispatchJob, dispatchSync, purgeCache, savedMessage } from './changes.ts';
 import type { AdminEnvironment, MirrorRef } from './changes.ts';
 import { adAllowed, adMap } from '../ads.ts';
 import type { AdPage, AdPlacement } from '../ads.ts';
@@ -15,6 +15,7 @@ import { trustSlugs } from '../trust.ts';
 export const settingsFields = {
   ads_display_enabled: 'Display ads', ads_native_enabled: 'Native ads', ads_sticky_enabled: 'Sticky ads', ads_social_enabled: 'Social Bar', ads_popunder_enabled: 'Popunder', ads_txt: 'ads.txt',
   static_top_n: 'Prebuilt top titles', site_name: 'Site name', site_tagline: 'Tagline', ads_enabled: 'Master ads switch', popunder_cap_hours: 'Popunder cap (hours)',
+  cache_ttl_list: 'List cache TTL (seconds)', cache_ttl_detail: 'Detail cache TTL (seconds)',
   maintenance: 'Maintenance mode', ratings_external: 'Show cached external ratings', sync_popularity_gate: 'Sync popularity gate', sync_max_titles: 'Max titles per sync',
   social_links: 'Social link slugs (comma-separated)',
 } as const;
@@ -78,6 +79,15 @@ export async function applyAdminAction(env: AdminEnvironment, identity: AdminIde
     const url = await dispatchSync(env, identity, fetcher);
     return { message: 'GitHub accepted the sync request. Completion and deployment are not yet verified; the repository sync-enable variable must also be set.', jobUrl: url };
   }
+  if (module === 'tools') {
+    const action = form.get('action') || '';
+    if (action === 'run-job') {
+      const url = await dispatchJob(env, identity, form.get('job') || '', fetcher);
+      return { message: 'GitHub accepted the job request. Completion is tracked in Actions; the repository enable switches still govern execution.', jobUrl: url };
+    }
+    if (action === 'purge-cache') return { message: await purgeCache(env, identity, text(form, 'url', 2048), fetcher), jobUrl: undefined };
+    throw new AdminError('Unknown tools action.');
+  }
   let sql = '', params: Array<string | number | null> = [], entity = '', id = '', before: unknown = null, after: unknown = null, mirrors: MirrorRef[] = [];
   const related: Array<{ sql: string; params: Array<string | number | null> }> = [];
   if (module === 'links') {
@@ -116,6 +126,8 @@ export async function applyAdminAction(env: AdminEnvironment, identity: AdminIde
     if (key === 'popunder_cap_hours' && (!Number.isFinite(Number(value)) || Number(value) < 1 || Number(value) > 168)) throw new AdminError('Use 1–168 hours.');
     if (key === 'sync_popularity_gate' && (!value || !Number.isFinite(Number(value)) || Number(value) < 0 || Number(value) > 100_000)) throw new AdminError('Use a popularity gate from 0 to 100000.');
     if (key === 'static_top_n' && (!/^\d+$/.test(value) || Number(value) > 15000)) throw new AdminError('Use 0–15000; the total asset cap still applies.');
+    if (key === 'cache_ttl_list' && (!/^\d+$/.test(value) || Number(value) < 60 || Number(value) > 86400)) throw new AdminError('Use 60–86400 seconds.');
+    if (key === 'cache_ttl_detail' && (!/^\d+$/.test(value) || Number(value) < 300 || Number(value) > 604800)) throw new AdminError('Use 300–604800 seconds.');
     if (key === 'sync_max_titles' && (!/^[1-9]\d*$/.test(value) || Number(value) > 2000)) throw new AdminError('Use 1–2000 titles per run.');
     if (key === 'site_name' && !value) throw new AdminError('A site name is required.');
     if (key === 'social_links') {

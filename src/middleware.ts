@@ -5,6 +5,7 @@ import { defineMiddleware } from 'astro:middleware';
 import { env, waitUntil } from 'cloudflare:workers';
 import { authenticateAdmin, AdminError, permitted } from './lib/admin/access';
 import { readConfig } from './lib/ads';
+import { siteConfig } from './lib/site-config';
 
 export const onRequest = defineMiddleware(async (context, next) => {
   let path = context.url.pathname;
@@ -33,8 +34,12 @@ export const onRequest = defineMiddleware(async (context, next) => {
     }
   }
   const cache = env.DEPLOYMENT_ENV === 'production' && !adTest ? (caches as unknown as { default: Cache }).default : undefined;
+  let ttls: { list: number; detail: number } | undefined;
+  if (cache && !path.startsWith('/watch/')) {
+    try { const config = await siteConfig(context.locals, env); ttls = { list: config.cacheTtlList, detail: config.cacheTtlDetail }; } catch { /* The page libraries' built-in TTLs apply. */ }
+  }
   const original = path.startsWith('/watch/') ? await cachedWatch(context.request, cache, next)
-    : await cachedCatalogue(context.request, cache, next);
+    : await cachedCatalogue(context.request, cache, next, ttls);
   const response = admin || adTest ? new Response(original.body, { status: original.status, statusText: original.statusText, headers: original.headers }) : original;
   if (admin || adTest) {
     response.headers.set('Cache-Control', 'private, no-store');

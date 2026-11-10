@@ -92,3 +92,60 @@ export async function dispatchSync(env: AdminEnvironment, actor: AdminIdentity, 
   if (!accepted) throw new AdminError('GitHub did not confirm the dispatch. Check Actions before retrying to avoid duplicate runs.', 502);
   return `https://github.com/${env.GITHUB_REPO}/actions/workflows/nightly.yml`;
 }
+
+const jobWorkflows = {
+  nightly: { file: 'nightly.yml', label: 'Daily sync' },
+  backup: { file: 'backup.yml', label: 'Private backup' },
+} as const;
+export type AdminJob = keyof typeof jobWorkflows;
+
+/** Tools "run any job": nightly reuses the exact sync dispatch; other workflows share its log-then-confirm shape. */
+export async function dispatchJob(env: AdminEnvironment, actor: AdminIdentity, job: string, fetcher: typeof fetch = fetch) {
+  if (!Object.hasOwn(jobWorkflows, job)) throw new AdminError('Choose a supported job.');
+  if (job === 'nightly') return dispatchSync(env, actor, fetcher);
+  const spec = jobWorkflows[job as AdminJob];
+  if (!env.GITHUB_ACTIONS_TOKEN || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(env.GITHUB_REPO || '')) throw new AdminError('Add the repository name and GitHub Actions token in secure settings before running a job.', 503);
+  // Log the actor and intent before the external action; no token is recorded.
+  const log = await env.DB.prepare("INSERT INTO admin_log(actor,entity,entity_id,before,after) VALUES(?,'job',?,NULL,?)")
+    .bind(actor.email, spec.file, JSON.stringify({ status: 'dispatch requested', ref: 'main' })).run();
+  let accepted = false;
+  try {
+    const response = await fetcher(`https://api.github.com/repos/${env.GITHUB_REPO}/actions/workflows/${spec.file}/dispatches`, {
+      method: 'POST', redirect: 'error', signal: AbortSignal.timeout(8000),
+      headers: { Authorization: `Bearer ${env.GITHUB_ACTIONS_TOKEN}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'ScreenPeek-admin' },
+      body: JSON.stringify({ ref: 'main', inputs: {} }),
+    });
+    accepted = response.status === 204;
+  } catch { /* Retain the intent log without leaking transport/credential data. */ }
+  await env.DB.prepare('UPDATE admin_log SET after=? WHERE id=?').bind(JSON.stringify({ status: accepted ? 'dispatch accepted' : 'dispatch unconfirmed', ref: 'main' }), log.meta.last_row_id).run();
+  if (!accepted) throw new AdminError('GitHub did not confirm the dispatch. Check Actions before retrying to avoid duplicate runs.', 502);
+  return `https://github.com/${env.GITHUB_REPO}/actions/workflows/${spec.file}`;
+}
+
+/** Tools cache purge: one URL, or the whole zone when the field is empty. Mirrors the delivery purge's success check. */
+export async function purgeCache(env: AdminEnvironment, actor: AdminIdentity, rawUrl: string, fetcher: typeof fetch = fetch) {
+  const value = rawUrl.trim();
+  if (value.length > 2048) throw new AdminError('The URL is too long.');
+  let files: string[] | undefined;
+  if (value) {
+    let parsed: URL;
+    try { parsed = new URL(value); } catch { throw new AdminError('Enter a full URL to purge, or leave the field empty to purge everything.'); }
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') throw new AdminError('Enter a full URL to purge, or leave the field empty to purge everything.');
+    files = [parsed.href];
+  }
+  if (!env.CLOUDFLARE_API_TOKEN || !/^[a-f0-9]{32}$/i.test(env.CLOUDFLARE_ZONE_ID || '')) throw new AdminError('Cache purge is not configured. Add the Cloudflare zone ID and API token in secure settings.', 503);
+  let ok = false;
+  try {
+    const response = await fetcher(`https://api.cloudflare.com/client/v4/zones/${env.CLOUDFLARE_ZONE_ID}/purge_cache`, {
+      method: 'POST', redirect: 'error', signal: AbortSignal.timeout(8000),
+      headers: { Authorization: `Bearer ${env.CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(files ? { files } : { purge_everything: true }),
+    });
+    const data: unknown = await response.json().catch(() => null);
+    ok = !!data && typeof data === 'object' && 'success' in data && (data as { success: unknown }).success === true;
+  } catch { /* Fall through to the failure result. */ }
+  await env.DB.prepare("INSERT INTO admin_log(actor,entity,entity_id,before,after) VALUES(?,'cache',?,NULL,?)")
+    .bind(actor.email, files ? files[0] : 'all', JSON.stringify({ status: ok ? 'purge accepted' : 'purge failed' })).run();
+  if (!ok) throw new AdminError('Cloudflare did not confirm the cache purge.', 502);
+  return files ? 'Cache purge accepted for that URL. Static pages still refresh on the next build.' : 'Full cache purge accepted. Static pages still refresh on the next build.';
+}

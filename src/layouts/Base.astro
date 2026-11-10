@@ -4,6 +4,7 @@ import AdSlot from '../components/AdSlot.astro';
 import Popunder from '../components/Popunder.astro';
 import { env } from 'cloudflare:workers';
 import { siteConfig } from '../lib/site-config';
+import { countryNames, previewCountryOf } from '../lib/geo';
 import { mediaUrl } from '../lib/media';
 import { breadcrumbs, canonicalUrl, filteredUrl, productionSeo, schemaJson, siteOrigin } from '../lib/seo';
 import type { Schema } from '../lib/seo';
@@ -15,6 +16,7 @@ interface Props {
 const { title, description = 'Discover movies and TV shows, cast, trailers and legal ways to watch.',
   noindex = false, sample = false, pageType = 'utility', pageNumber = 1, schemas = [], ogImage, ogType = 'website' } = Astro.props;
 const site = await siteConfig(Astro.locals, env);
+const previewCountry = previewCountryOf(Astro.request);
 const logo = mediaUrl(site.logo, env.R2_PUBLIC_BASE);
 const canonical = canonicalUrl(Astro.url, siteOrigin(env.SITE_URL), pageNumber);
 let override: { title: string | null; noindex: number } | null = null;
@@ -46,6 +48,7 @@ if (pageType !== 'utility' && Astro.url.pathname !== '/' && !structured.some(sch
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   </head>
   <body data-page-type={pageType}>
+    {previewCountry && <div class="preview-banner">Preview mode: viewing as a visitor from {previewCountry} ({countryNames[previewCountry]}). <a href="/admin/tools/?preview=off">Exit preview</a></div>}
     <a class="skip" href="#content">Skip to content</a>
     <header class="site-header">
       <a class="brand" href="/" aria-label={`${site.name} home`}>{logo ? <img src={logo} width="128" height="32" alt={site.name} /> : site.name === 'ScreenPeek' ? <>Screen<span>Peek</span></> : site.name}</a>

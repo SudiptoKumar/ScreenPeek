@@ -8,7 +8,7 @@ import { adminData, exportAdminBackup } from '../../lib/admin/data';
 import type { AdminData } from '../../lib/admin/data';
 import { csvRows, listData, listDefaults, listSpec } from '../../lib/admin/universal';
 import { adminForm, applyAdminAction } from '../../lib/admin/actions';
-const allowed = ['dashboard', 'links', 'ads', 'content', 'pages', 'sync', 'settings', 'backup', 'seo', 'changes', 'titles', 'people'];
+const allowed = ['dashboard', 'links', 'ads', 'content', 'pages', 'sync', 'settings', 'backup', 'seo', 'changes', 'titles', 'people', 'tools'];
 const module = (Astro.params.path || 'dashboard') as AdminModule;
 const actor = Astro.locals.admin;
 let data: AdminData | undefined, error = '', message = '', jobUrl: string | undefined, submitted: URLSearchParams | undefined;
@@ -18,6 +18,11 @@ try {
   if (!allowed.includes(module)) throw new AdminError('Admin module not found.', 404);
   if (module === 'dashboard' && actor && !permitted(actor, module)) return Astro.redirect('/admin/links/', 302);
   requirePermission(actor, module);
+  if (module === 'tools' && Astro.request.method === 'GET' && Astro.url.searchParams.has('preview')) {
+    const preview = Astro.url.searchParams.get('preview') || '';
+    if (['US', 'GB', 'CA', 'AU'].includes(preview)) Astro.cookies.set('sp_preview_country', preview, { path: '/', httpOnly: true, sameSite: 'lax', secure: Astro.url.protocol === 'https:', maxAge: 7200 });
+    else if (preview === 'off') Astro.cookies.delete('sp_preview_country', { path: '/' });
+  }
   if (Astro.url.searchParams.has('list')) listSpec(actor,Astro.url.searchParams.get('list') || '');
   if (Astro.request.method === 'POST') {
     submitted = module==='backup' && Astro.request.headers.get('Content-Type')?.startsWith('multipart/form-data') ? await restoreForm(Astro.request) : await adminForm(Astro.request);

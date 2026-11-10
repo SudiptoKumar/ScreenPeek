@@ -39,7 +39,7 @@
 - [x] 1.35 Admin universal powers (ADMIN-PANEL §A): search/filter/sort/CSV, bulk edit, soft-delete → Trash (30-day, restore, "used in N places"), scheduling on links/ads/pins, actor-stamped history
 - [x] 1.36 Not-working report (core checks: sync failures, missing poster/overview, empty/duplicate slots, visited 404s, quota > 80%) with Fix deep links
 - [x] 1.37 Titles & People editor core: field edit + locks vs sync, pin/hide/delete (+ blocklist), re-fetch/import by TMDb ID via workflow dispatch, reset votes
-- [ ] 1.38 Admin Tools module: global search, preview-as-visitor (country cookie + device frame), run-any-job buttons; Settings & Health: secrets set/not-set panel, cache TTL settings
+- [x] 1.38 Admin Tools module: global search, preview-as-visitor (country cookie + device frame), run-any-job buttons; Settings & Health: secrets set/not-set panel, cache TTL settings
 
 ## Phase 2 — Growth
 - [ ] 2.1 Link splits (A/B %) + full rule precedence + per-destination click stats
