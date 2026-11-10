@@ -43,4 +43,8 @@ jobs:
           sed -i "s/00000000-0000-0000-0000-000000000001/${D1_DATABASE_ID}/" wrangler.toml
           sed -i "s/00000000000000000000000000000001/${KV_NAMESPACE_ID}/" wrangler.toml
           node scripts/tool.mjs wrangler d1 execute DB --remote --file db/schema.sql
+          # pipefail would turn yes's SIGPIPE (once wrangler exits) into a
+          # false step failure after a fully successful apply.
+          set +o pipefail
           yes | node scripts/tool.mjs wrangler d1 migrations apply DB --remote
+          test ${PIPESTATUS[0]} -eq 0
