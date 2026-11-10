@@ -7,7 +7,7 @@ test('diagnostics detect and clear real local failures, respect roles, flag meas
  try{await applyLocalSql(local.database,await readFile('db/schema.sql','utf8'));await applyLocalMigrations(local.database);
  await local.db.batch([{sql:"INSERT INTO titles(id,type,slug,title) VALUES(1,'movie','missing','Missing')"},{sql:"INSERT INTO sync_log(started_at,status) VALUES(datetime('now'),'failed')"},{sql:"INSERT INTO notfound_log(path,count) VALUES('/missing/',3)"},{sql:"INSERT INTO ad_slots(page_type,placement,code) VALUES('home','native','same'),('detail','native','same')"}]);
  await env.CONFIG.put('health:usage',JSON.stringify({source:'cloudflare-graphql',measured_at:new Date().toISOString(),worker_requests:90000,d1_rows_read:4100000}));
- const issues=await healthReport(env,owner);for(const key of ['sync','poster:movie:1','overview:movie:1','404:/missing/','duplicate:home:native','quota:worker_requests','quota:d1_rows_read'])assert.ok(issues.some(row=>row.key===key),key);
+ const issues=await healthReport(env,owner);for(const key of ['sync','poster:movie:1','overview:movie:1','404:/missing/','duplicate:shared','quota:worker_requests','quota:d1_rows_read'])assert.ok(issues.some(row=>row.key===key),key);
  await setIssueSnooze(env,owner,'poster:movie:1');assert.ok((await healthReport(env,owner)).find(row=>row.key==='poster:movie:1')?.snoozed_until);
  await assert.rejects(setIssueSnooze(env,{...owner,role:'viewer'},'sync'),/role/);
  const editor=await healthReport(env,{...owner,role:'editor'});assert.equal(editor.some(row=>row.key.startsWith('duplicate:')||row.key.startsWith('empty:')),false);

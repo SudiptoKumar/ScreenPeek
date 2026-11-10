@@ -1,0 +1,41 @@
+name: One-off 404 cleanup
+
+# One-time: removes the stale /favicon.ico row from notfound_log after the
+# real favicon.ico shipped (the 404 itself is fixed by the new asset; this
+# only clears the historical log entry). Manual dispatch only.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: screenpeek-404-cleanup
+  cancel-in-progress: false
+
+jobs:
+  clean:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci --no-fund
+      - name: Delete the stale /favicon.ico row from notfound_log
+        shell: bash
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+          KV_NAMESPACE_ID: ${{ secrets.KV_NAMESPACE_ID }}
+        run: |
+          sed -i "s/00000000-0000-0000-0000-000000000001/${D1_DATABASE_ID}/" wrangler.toml
+          sed -i "s/00000000000000000000000000000001/${KV_NAMESPACE_ID}/" wrangler.toml
+          node scripts/tool.mjs wrangler d1 execute DB --remote --command "DELETE FROM notfound_log WHERE path = '/favicon.ico'"
