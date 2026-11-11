@@ -2,8 +2,10 @@ import { test, expect } from '@playwright/test';
 
 const pad = (page: import('@playwright/test').Page) =>
   page.evaluate(() => parseFloat(getComputedStyle(document.body).paddingTop));
-const headerTop = (page: import('@playwright/test').Page) =>
-  page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('.site-header')!).top));
+const headerPosition = (page: import('@playwright/test').Page) =>
+  page.evaluate(() => getComputedStyle(document.querySelector('.site-header')!).position);
+const headerBottom = (page: import('@playwright/test').Page) =>
+  page.evaluate(() => document.querySelector('.site-header')!.getBoundingClientRect().bottom);
 
 test('floating top ads push the page down and closing them restores it', async ({ page }) => {
   await page.goto('/series/');
@@ -20,13 +22,16 @@ test('floating top ads push the page down and closing them restores it', async (
   });
   await expect.poll(() => pad(page)).toBeGreaterThanOrEqual(156);
   await expect.poll(() => pad(page)).toBeLessThanOrEqual(164);
-  await expect.poll(() => headerTop(page)).toBeGreaterThanOrEqual(156);
+  await expect.poll(() => headerPosition(page)).toBe('static');
+  await page.evaluate(() => window.scrollTo(0, 900));
+  await expect.poll(() => headerBottom(page)).toBeLessThanOrEqual(0);
+  await page.evaluate(() => window.scrollTo(0, 0));
   await page.evaluate(() => document.getElementById('fake-top-ad-2')?.remove());
   await expect.poll(() => pad(page)).toBeGreaterThanOrEqual(86);
   await expect.poll(() => pad(page)).toBeLessThanOrEqual(94);
   await page.evaluate(() => document.getElementById('fake-top-ad-1')?.remove());
   await expect(page.locator('body')).toHaveCSS('padding-top', '0px');
-  await expect.poll(() => headerTop(page)).toBe(0);
+  await expect.poll(() => headerPosition(page)).toBe('sticky');
 });
 
 test('a full-screen overlay is not treated as a top bar', async ({ page }) => {

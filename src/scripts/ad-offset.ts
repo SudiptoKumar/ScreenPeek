@@ -11,8 +11,11 @@
 // top of the screen with elementFromPoint, and only counts a cover that
 // really contains an ad (an image, a frame, a video, a shadow root, or a
 // painted background). When a real stack of bars covers the top, the
-// page is padded down below it and the sticky header is offset with it;
-// a full-screen overlay (the vignette) is never padded for.
+// page is padded down below it; a full-screen overlay (the vignette) is
+// never padded for. While bars are showing, the site header also stops
+// being sticky — the owner wants the heading to scroll up and away with
+// the page instead of hanging stuck below the ads; it returns to sticky
+// when the bars are gone.
 
 const PROBE_BOTTOM = 320; // bars never legitimately exceed this depth
 const STEP = 10;
@@ -92,7 +95,12 @@ function apply() {
   current = next;
   document.body.style.paddingTop = next > 0 ? `${next}px` : '';
   const header = document.querySelector<HTMLElement>('.site-header');
-  if (header) header.style.top = next > 0 ? `${next}px` : '';
+  if (header) {
+    // While ads cover the top, unstick the header so it scrolls up and
+    // away with the page; restore the original sticky header afterwards.
+    header.style.position = next > 0 ? 'static' : '';
+    header.style.top = '';
+  }
 }
 
 function schedule() {
