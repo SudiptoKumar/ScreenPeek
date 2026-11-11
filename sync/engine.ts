@@ -170,12 +170,15 @@ export async function runSync(options: {
         for (const season of data.seasons) {
           if (overTime()) throw new Error('Sync deadline reached');
           if (season.episode_count < 1) continue;
-          const stored = await db.query<{ count: number }>('SELECT COUNT(*) AS count FROM episodes WHERE title_id=? AND season_number=?', [candidate.id, season.season_number]);
-          if (!candidate.changed && stored[0]?.count === season.episode_count) continue;
+          const existingEpisodes = new Map((await db.query<{ episode_number: number; name: string; air_date: string | null; still_r2: string | null }>('SELECT episode_number,name,air_date,still_r2 FROM episodes WHERE title_id=? AND season_number=?', [candidate.id, season.season_number])).map(row => [row.episode_number, row]));
+          if (!candidate.changed && existingEpisodes.size === season.episode_count) continue;
           try {
             const details = await client.season<SeasonPayload>(candidate.id, season.season_number);
             if (!Array.isArray(details.episodes)) throw new Error('Invalid season payload');
-            const existingEpisodes = new Map((await db.query<{ episode_number: number; name: string; air_date: string | null; still_r2: string | null }>('SELECT episode_number,name,air_date,still_r2 FROM episodes WHERE title_id=? AND season_number=?', [candidate.id, season.season_number])).map(row => [row.episode_number, row]));
+            // One D1 request per season, not one per episode: the REST
+            // API rate limit is per request, and a long-running show
+            // otherwise burns hundreds of calls on a single title.
+            const statements: SqlStatement[] = [];
             for (const episode of details.episodes || []) {
               if (overTime()) throw new Error('Sync deadline reached');
               if (!Number.isSafeInteger(episode.episode_number) || episode.episode_number < 1) continue;
@@ -183,11 +186,12 @@ export async function runSync(options: {
               if (priorEpisode && priorEpisode.still_r2 && priorEpisode.name === (episode.name || '') && (priorEpisode.air_date || null) === (episode.air_date || null)) continue;
               const still = priorEpisode?.still_r2 ? { keys: { '185': priorEpisode.still_r2 as string }, warning: null } : await processImage(client, images, { kind: 'still', id: candidate.id, mediaType: 'tv', path: episode.still_path });
               if (still.warning) warn(still.warning);
-              await batch([{ sql: `INSERT INTO episodes(title_id,season_number,episode_number,name,overview,air_date,still_r2)
+              statements.push({ sql: `INSERT INTO episodes(title_id,season_number,episode_number,name,overview,air_date,still_r2)
                 SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM titles WHERE id=? AND type='tv' AND deleted=0 AND deleted_at IS NULL)
                 ON CONFLICT(title_id,season_number,episode_number) DO UPDATE SET name=excluded.name,overview=excluded.overview,air_date=excluded.air_date,still_r2=excluded.still_r2`,
-                params: [candidate.id, season.season_number, episode.episode_number, episode.name || '', episode.overview || '', episode.air_date || null, still.keys['185'] || null, candidate.id] }]);
+                params: [candidate.id, season.season_number, episode.episode_number, episode.name || '', episode.overview || '', episode.air_date || null, still.keys['185'] || null, candidate.id] });
             }
+            if (statements.length) await batch(statements);
           } catch (error) { if (overTime()) throw error; warn(`TV ${candidate.id}, season ${season.season_number}: episode refresh failed.`); }
         }
         await batch([{ sql: 'DELETE FROM sync_queue WHERE title_id=? AND title_type=?', params: [candidate.id, candidate.type] }]);
@@ -197,7 +201,18 @@ export async function runSync(options: {
         // A deadline stop mid-title is a deferral, not a failure: the
         // title keeps its queue row and resumes next run (every episode
         // and image already saved stays saved).
-        if (!overTime()) { console.error(`Title persistence failure ${candidate.type}:${candidate.id}:`, error); warn(`${candidate.type}:${candidate.id}: persistence failed; candidate retained for retry.`); }
+        if (!overTime()) {
+          console.error(`Title persistence failure ${candidate.type}:${candidate.id}:`, error);
+          // A D1 rate limit (HTTP 429) is global, not per-title: every
+          // later title would fail the same way. Stop the loop cleanly
+          // and let the next run continue — upserts make that safe.
+          if (error instanceof Error && error.message.includes('HTTP 429')) {
+            warn('Database rate limit reached; remaining work is deferred to the next run.');
+            deferred.push(...work.prepared.slice(index + 1).map(item => item.candidate));
+            break;
+          }
+          warn(`${candidate.type}:${candidate.id}: persistence failed; candidate retained for retry.`);
+        }
       }
     }
     await purgeExpiredTrash({query:db.query.bind(db),batch:async statements=>{const result=await db.batch(statements);rowsWritten+=result.rowsWritten;return result;}},clock(),Math.min(1000,Math.max(0,Math.floor((budget-rowsWritten)/10))));
@@ -227,8 +242,13 @@ export async function runSync(options: {
     // Raw upstream errors stay out of the summary (they can carry URLs
     // and tokens); the detail goes to the server log only.
     console.error('Sync infrastructure failure:', error);
-    warn('Sync stopped after an infrastructure or source failure; existing catalogue data was retained.');
-    summary.status = 'failed';
+    if (error instanceof Error && error.message.includes('HTTP 429')) {
+      warn('Database rate limit reached near the end of the run; unfinished work stays queued for the next run.');
+      summary.status = 'partial';
+    } else {
+      warn('Sync stopped after an infrastructure or source failure; existing catalogue data was retained.');
+      summary.status = 'failed';
+    }
   }
   summary.finishedAt = clock().toISOString();
   if (logId) {
