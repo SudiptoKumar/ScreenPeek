@@ -16,13 +16,22 @@
 // being sticky — the owner wants the heading to scroll up and away with
 // the page instead of hanging stuck below the ads; it returns to sticky
 // when the bars are gone.
+//
+// Smoothness: the networks animate their bars in and out. A single
+// delayed jump (v2) looked unsynchronised next to that animation, so
+// while anything at the top is changing, the offset now follows the
+// covered depth frame by frame — the page slides together with the ad.
+// There is deliberately no CSS transition on the padding: it would lag
+// behind the tracked value and fight the synchronisation.
 
 const PROBE_BOTTOM = 320; // bars never legitimately exceed this depth
 const STEP = 10;
 const START_TOLERANCE = 24; // the stack must begin this close to the top
 const GAP_TOLERANCE = 40; // seams allowed between stacked bars
+const STABLE_FRAMES = 14; // frames without change before tracking rests
 let current = -1;
-let scheduled = false;
+let tracking = false;
+let stableFrames = 0;
 
 function isOurs(element: Element | null): boolean {
   if (!element) return true;
@@ -88,30 +97,47 @@ function coveredDepth(): number {
   return low + 1;
 }
 
-function apply() {
-  scheduled = false;
-  const next = coveredDepth();
-  if (current >= 0 && Math.abs(next - current) <= 2) return;
+function setOffset(next: number) {
+  const wasCovered = current > 0;
   current = next;
   document.body.style.paddingTop = next > 0 ? `${next}px` : '';
-  const header = document.querySelector<HTMLElement>('.site-header');
-  if (header) {
-    // While ads cover the top, unstick the header so it scrolls up and
-    // away with the page; restore the original sticky header afterwards.
-    header.style.position = next > 0 ? 'static' : '';
-    header.style.top = '';
+  if ((next > 0) !== wasCovered) {
+    const header = document.querySelector<HTMLElement>('.site-header');
+    if (header) {
+      // While ads cover the top, unstick the header so it scrolls up and
+      // away with the page; restore the original sticky header afterwards.
+      header.style.position = next > 0 ? 'static' : '';
+      header.style.top = '';
+    }
   }
 }
 
-function schedule() {
-  if (scheduled) return;
-  scheduled = true;
-  requestAnimationFrame(() => setTimeout(apply, 30));
+/** Follow the covered depth frame by frame until it settles. */
+function trackFrame() {
+  const next = coveredDepth();
+  if (current < 0 || Math.abs(next - current) > 2) {
+    setOffset(next);
+    stableFrames = 0;
+  } else {
+    stableFrames += 1;
+  }
+  if (stableFrames < STABLE_FRAMES) {
+    requestAnimationFrame(trackFrame);
+  } else {
+    tracking = false;
+  }
 }
 
-new MutationObserver(schedule).observe(document.body, {
+function kick() {
+  if (tracking) { stableFrames = 0; return; }
+  tracking = true;
+  stableFrames = 0;
+  requestAnimationFrame(trackFrame);
+}
+
+new MutationObserver(kick).observe(document.body, {
   childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class', 'hidden'],
 });
-window.addEventListener('resize', schedule);
-window.setInterval(apply, 1500);
-schedule();
+window.addEventListener('resize', kick);
+window.setInterval(() => { if (!tracking && coveredDepth() !== current) kick(); }, 1500);
+kick();

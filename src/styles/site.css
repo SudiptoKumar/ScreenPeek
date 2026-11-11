@@ -46,5 +46,4 @@ img[data-lazy-src]{visibility:hidden}.poster-frame:has(>img[data-lazy-src]){aspe
 .ad-slot[data-placement$="_b"],.ad-slot[data-placement$="_c"]{margin-top:0}
 .grid-ad .ad-slot[data-placement$="_b"],.grid-ad .ad-slot[data-placement$="_c"],.grid-infeed .ad-slot[data-placement$="_b"],.grid-infeed .ad-slot[data-placement$="_c"]{margin-top:0}
 
-/* Floating top ad bars: the page eases down below them (see scripts/ad-offset.ts). */
-@media (prefers-reduced-motion: no-preference){body{transition:padding-top .25s ease}}
+/* Floating top ad bars: scripts/ad-offset.ts tracks them frame by frame; no CSS transition on body padding (it would lag the tracking). */

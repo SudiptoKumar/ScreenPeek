@@ -80,3 +80,29 @@ test('a bar wrapped in a full-height overlay container is still detected', async
   await page.evaluate(() => document.getElementById('fake-wrap')?.remove());
   await expect(page.locator('body')).toHaveCSS('padding-top', '0px');
 });
+
+test('the page follows the ad while it slides in, not after it', async ({ page }) => {
+  await page.goto('/series/');
+  await expect(page.locator('body')).toHaveCSS('padding-top', '0px');
+  await page.evaluate(() => {
+    const bar = document.createElement('div');
+    bar.id = 'fake-sliding-ad';
+    bar.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:0px;z-index:9999;background:purple';
+    document.body.appendChild(bar);
+    let h = 0;
+    const timer = setInterval(() => {
+      h += 10;
+      bar.style.height = `${h}px`;
+      if (h >= 100) clearInterval(timer);
+    }, 60);
+  });
+  // Mid-animation the padding must already be part-way, not 0 and not final.
+  await page.waitForTimeout(330);
+  const mid = await pad(page);
+  expect(mid).toBeGreaterThan(15);
+  expect(mid).toBeLessThan(95);
+  await expect.poll(() => pad(page)).toBeGreaterThanOrEqual(96);
+  await expect.poll(() => pad(page)).toBeLessThanOrEqual(104);
+  await page.evaluate(() => document.getElementById('fake-sliding-ad')?.remove());
+  await expect(page.locator('body')).toHaveCSS('padding-top', '0px');
+});
