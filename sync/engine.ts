@@ -174,7 +174,13 @@ export async function runSync(options: {
           if (overTime()) throw new Error('Sync deadline reached');
           if (season.episode_count < 1) continue;
           const existingEpisodes = new Map((await db.query<{ episode_number: number; name: string; air_date: string | null; still_r2: string | null }>('SELECT episode_number,name,air_date,still_r2 FROM episodes WHERE title_id=? AND season_number=?', [candidate.id, season.season_number])).map(row => [row.episode_number, row]));
-          if (!candidate.changed && existingEpisodes.size === season.episode_count) continue;
+          // A season whose episode count already matches is not
+          // re-fetched — even for a changed title. New episodes change
+          // the count, so they are always picked up; only text edits
+          // inside an otherwise unchanged season wait for a fuller
+          // reconciliation. Without this, one long-running show costs
+          // one source fetch per season on every single run.
+          if (existingEpisodes.size === season.episode_count) continue;
           try {
             const details = await client.season<SeasonPayload>(candidate.id, season.season_number);
             if (!Array.isArray(details.episodes)) throw new Error('Invalid season payload');
