@@ -101,6 +101,20 @@ test('filter skips blocked/deleted/fresh/low-discovery titles while prioritising
   assert.equal(JSON.stringify(candidates), original);
 });
 
+test('per-type caps pace the build: a capped type defers while the other type keeps filling the run', () => {
+  const options = { existing: new Map<string, ExistingTitleState>(), blocklist: new Set<string>(), now };
+  const candidates: Candidate[] = [
+    { id: 1, type: 'movie', changed: false, popularity: 30, poster_path: '/a.jpg' },
+    { id: 2, type: 'movie', changed: false, popularity: 20, poster_path: '/a.jpg' },
+    { id: 3, type: 'movie', changed: false, popularity: 10, poster_path: '/a.jpg' },
+    { id: 4, type: 'tv', changed: false, popularity: 30, poster_path: '/a.jpg' },
+    { id: 5, type: 'tv', changed: false, popularity: 20, poster_path: '/a.jpg' },
+  ];
+  const result = filterCandidates(candidates, { ...options, perTypeMax: { movie: 2, tv: 1 } });
+  assert.deepEqual(result.selected.map(item => `${item.type}:${item.id}`), ['movie:1', 'movie:2', 'tv:4']);
+  assert.deepEqual(result.deferred.map(item => `${item.type}:${item.id}`), ['movie:3', 'tv:5']);
+});
+
 test('default cap is 2000, deduplication and tie order are deterministic, and zero cap defers eligible work', () => {
   const candidates: Candidate[] = Array.from({ length: 2001 }, (_, index) => ({ id: 2001 - index, type: 'movie', changed: false, popularity: 20 }));
   const options = { existing: new Map<string, ExistingTitleState>(), blocklist: new Set<string>(), now };

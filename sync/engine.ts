@@ -1,7 +1,7 @@
 import { purgeExpiredTrash } from './trash.ts';
 import { posterColour } from './colour.ts';
 import { composeOg } from './og.ts';
-import type { TmdbClient } from './tmdb.ts';
+import type { MediaType, TmdbClient } from './tmdb.ts';
 import type { Candidate, ExistingTitleState, SourcePerson } from './types.ts';
 import { titleKey } from './types.ts';
 import type { SqlClient, SqlStatement } from './storage.ts';
@@ -71,12 +71,30 @@ export async function runSync(options: {
       } catch { warn('An invalid queued candidate was ignored.'); }
     }
     const manual = Boolean(options.targets || options.personIds);
+    // Owner's catalogue build (2026-11-11): add 500 movies + 100 series a
+    // day (shaped per run: 125 movies + 25 series x 4 runs) until the
+    // catalogue holds 5,000 complete movies and 2,000 complete series;
+    // past a goal, that type drops to a small latest-only trickle.
+    // "Complete" = the poster is stored (poster_r2 set). Manual targeted
+    // imports bypass the caps, like they bypass the popularity gate.
+    let perTypeMax: Partial<Record<MediaType, number>> | undefined;
+    if (!manual) {
+      const cap = (value: string | undefined, fallback: number) => { const parsed = Number(value); return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : fallback; };
+      const completeMovies = [...existing.values()].filter(row => row.type === 'movie' && row.poster_r2).length;
+      const completeSeries = [...existing.values()].filter(row => row.type === 'tv' && row.poster_r2).length;
+      const movieGoal = cap(config.sync_movie_goal, 5000);
+      const seriesGoal = cap(config.sync_series_goal, 2000);
+      const movieCap = completeMovies >= movieGoal ? 25 : cap(config.sync_movie_cap, 125);
+      const seriesCap = completeSeries >= seriesGoal ? 10 : cap(config.sync_series_cap, 25);
+      perTypeMax = { movie: movieCap, tv: seriesCap };
+      console.info(`Sync targets: complete movies ${completeMovies}/${movieGoal} (per-run cap ${movieCap}), complete series ${completeSeries}/${seriesGoal} (per-run cap ${seriesCap}).`);
+    }
     // A targeted (manual) import must import exactly the requested titles.
     // Merging the deferred queue in would rank the targets behind thousands
     // of queued candidates and they would never reach the selection window.
     // Queue rows themselves stay untouched in the database for cron runs.
     const filtered = filterCandidates(manual ? collected.titles : [...queued, ...collected.titles], { existing, blocklist: blocked, now,
-      maxTitles: options.maxTitles ?? Math.min(2000, Number(config.sync_max_titles || 2000)), popularityGate: manual ? 0 : threshold });
+      maxTitles: options.maxTitles ?? Math.min(2000, Number(config.sync_max_titles || 2000)), popularityGate: manual ? 0 : threshold, perTypeMax });
     const usedSlugs = new Set([...existing.values()].map(row => row.slug));
     const usedPeopleSlugs = new Set([...people.values()].map(row => row.slug));
     // Prepare gets the first half of the run's clock; the persist phase

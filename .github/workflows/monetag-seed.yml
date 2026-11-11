@@ -46,3 +46,14 @@ jobs:
           SQL
           node scripts/tool.mjs wrangler d1 execute DB --remote --file=/tmp/monetag.sql
           node scripts/tool.mjs wrangler d1 execute DB --remote --command "SELECT page_type,placement,enabled,length(code) AS code_len FROM ad_slots WHERE page_type='global' AND placement IN ('inpage_push','interstitial')"
+          # The public resolver reads the KV mirror first (key ad:<page>:<placement>);
+          # an empty tombstone mirror would shadow the D1 rows, so mirror them too,
+          # in the same record shape the admin propagation writes.
+          cat > /tmp/ipp.json <<'JSON'
+          {"page_type":"global","placement":"inpage_push","code":"<script>(function(s){s.dataset.zone='12236746',s.src='https://nap5k.com/tag.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>","enabled":1,"starts_at":null,"ends_at":null,"test_mode":0,"deleted_at":null}
+          JSON
+          cat > /tmp/vig.json <<'JSON'
+          {"page_type":"global","placement":"interstitial","code":"<script>(function(s){s.dataset.zone='12236759',s.src='https://n6wxm.com/vignette.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>","enabled":1,"starts_at":null,"ends_at":null,"test_mode":0,"deleted_at":null}
+          JSON
+          node scripts/tool.mjs wrangler kv key put "ad:global:inpage_push" --path=/tmp/ipp.json --namespace-id=${KV_NAMESPACE_ID}
+          node scripts/tool.mjs wrangler kv key put "ad:global:interstitial" --path=/tmp/vig.json --namespace-id=${KV_NAMESPACE_ID}

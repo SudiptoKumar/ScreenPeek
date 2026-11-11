@@ -108,6 +108,7 @@ export function filterCandidates(
   options: {
     existing: Map<string, ExistingTitleState>; blocklist: Set<string>; now: Date;
     freshnessHours?: number; popularityGate?: number; maxTitles?: number;
+    perTypeMax?: Partial<Record<MediaType, number>>;
   },
 ) {
   const now = checkedNow(options.now);
@@ -158,5 +159,17 @@ export function filterCandidates(
     || (a.type === b.type ? 0 : a.type === 'movie' ? -1 : 1)
     || Number(options.existing.has(titleKey(a.type, a.id))) - Number(options.existing.has(titleKey(b.type, b.id)))
     || Number(b.changed) - Number(a.changed) || popularity(b) - popularity(a) || identityOrder(a, b));
-  return { selected: eligible.slice(0, maxTitles), deferred: eligible.slice(maxTitles), skipped };
+  // Per-type caps pace the catalogue build (owner's 500 movies + 100
+  // series per day, shaped per run): once a type hits its cap, its
+  // remaining titles defer while the other type keeps filling the run.
+  const selected: Candidate[] = [];
+  const deferred: Candidate[] = [];
+  const taken: Partial<Record<MediaType, number>> = {};
+  for (const candidate of eligible) {
+    const cap = options.perTypeMax?.[candidate.type];
+    if (selected.length >= maxTitles || (cap !== undefined && (taken[candidate.type] ?? 0) >= cap)) { deferred.push(candidate); continue; }
+    taken[candidate.type] = (taken[candidate.type] ?? 0) + 1;
+    selected.push(candidate);
+  }
+  return { selected, deferred, skipped };
 }
