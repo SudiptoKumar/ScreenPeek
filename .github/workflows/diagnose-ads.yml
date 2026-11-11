@@ -1,0 +1,48 @@
+name: Diagnose ads (manual, one-time)
+
+# Read-only dump of every layer that decides whether the two Monetag
+# global slots render: D1 config switches, D1 ad_slots rows, KV config
+# mirrors and KV slot mirrors. Delete after use.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: screenpeek-diagnose-ads
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci --no-fund
+      - name: Dump ad state from D1 and KV
+        shell: bash
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+          KV_NAMESPACE_ID: ${{ secrets.KV_NAMESPACE_ID }}
+        run: |
+          sed -i "s/00000000-0000-0000-0000-000000000001/${D1_DATABASE_ID}/" wrangler.toml
+          sed -i "s/00000000000000000000000000000001/${KV_NAMESPACE_ID}/" wrangler.toml
+          echo "== D1 config switches =="
+          node scripts/tool.mjs wrangler d1 execute DB --remote --command "SELECT key,value FROM config WHERE key IN ('ads_enabled','ads_push_enabled','ads_interstitial_enabled','ads_notifications_enabled','ads_social_enabled')"
+          echo "== D1 ad_slots global rows =="
+          node scripts/tool.mjs wrangler d1 execute DB --remote --command "SELECT page_type,placement,enabled,test_mode,length(code) AS code_len,substr(code,1,60) AS code_head FROM ad_slots WHERE page_type='global'"
+          echo "== KV config mirrors =="
+          for k in ads_enabled ads_push_enabled ads_interstitial_enabled; do echo "-- config:$k"; node scripts/tool.mjs wrangler kv key get "config:$k" --namespace-id=${KV_NAMESPACE_ID} || true; echo; done
+          echo "== KV slot mirrors =="
+          for k in ad:global:inpage_push ad:global:interstitial ad:global:social_bar; do echo "-- $k"; node scripts/tool.mjs wrangler kv key get "$k" --namespace-id=${KV_NAMESPACE_ID} || true; echo; done
