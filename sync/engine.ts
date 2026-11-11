@@ -83,6 +83,7 @@ export async function runSync(options: {
     // keeps the second half. Without a deadline, preparing a large
     // selection consumed the whole budget and zero titles were stored.
     const work = await prepareCandidates(client, filtered.selected, { existing, now, usedSlugs, popularityGate: threshold, forceImport: manual, deadlineMs: start + Math.floor(duration / 2) });
+    console.info(`Sync timing: prepare took ${Math.round(performance.now() - start)}ms for ${work.prepared.length} titles (${filtered.selected.length} selected).`);
     const changedPeople = new Set([...collected.personIds, ...(options.personIds || [])]);
     const processedPeople = new Set<number>();
     const providerLogos = new Map<number, string | null>();
@@ -135,6 +136,8 @@ export async function runSync(options: {
       const { candidate, data } = prepared;
       const previous = existing.get(titleKey(candidate.type, candidate.id));
       const overTime = () => performance.now() - start >= duration;
+      const titleStart = performance.now();
+      console.info(`Sync timing: starting ${candidate.type}:${candidate.id} people=${data.people.length} seasons=${data.seasons.length} at ${Math.round(titleStart - start)}ms.`);
       try {
         for (const person of data.people) { if (overTime()) throw new Error('Sync deadline reached'); await syncPerson(person); }
         data.credits = data.credits.filter(credit => !blocked.has(`person:${credit.person_id}`) && !people.get(credit.person_id)?.deleted_at);
