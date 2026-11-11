@@ -151,9 +151,12 @@ export function filterCandidates(
     else eligible.push(candidate);
   }
   // Owner's extraction order (2026-11-11): top-rated movies first, then
-  // all other movies, then series — popularity decides inside each tier.
+  // all other movies, then series. Inside each tier, NEW titles (not yet
+  // in the catalogue) come before updates of existing ones — the latest
+  // additions always land first; updates use whatever room is left.
   eligible.sort((a, b) => Number(b.topRated === true) - Number(a.topRated === true)
     || (a.type === b.type ? 0 : a.type === 'movie' ? -1 : 1)
+    || Number(options.existing.has(titleKey(a.type, a.id))) - Number(options.existing.has(titleKey(b.type, b.id)))
     || Number(b.changed) - Number(a.changed) || popularity(b) - popularity(a) || identityOrder(a, b));
   return { selected: eligible.slice(0, maxTitles), deferred: eligible.slice(maxTitles), skipped };
 }

@@ -53,10 +53,10 @@ export class TmdbClient {
     this.fetcher = options.fetch || globalThis.fetch;
     this.sleep = options.sleep || (milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds)));
     this.now = options.now || Date.now;
-    this.concurrency = options.concurrency ?? 5;
+    this.concurrency = options.concurrency ?? 10;
     this.retries = options.maxRetries ?? 4;
     this.timeoutMs = options.timeoutMs ?? 30_000;
-    if (!Number.isInteger(this.concurrency) || this.concurrency < 1 || this.concurrency > 5) throw new Error('TMDb concurrency must be between 1 and 5');
+    if (!Number.isInteger(this.concurrency) || this.concurrency < 1 || this.concurrency > 10) throw new Error('TMDb concurrency must be between 1 and 10');
     if (!Number.isInteger(this.retries) || this.retries < 0 || this.retries > 8) throw new Error('TMDb maxRetries must be between 0 and 8');
     if (!Number.isInteger(this.timeoutMs) || this.timeoutMs < 1) throw new Error('TMDb timeout must be positive');
   }

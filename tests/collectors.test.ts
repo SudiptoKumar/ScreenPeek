@@ -80,7 +80,7 @@ test('feed failures and malformed pagination propagate instead of returning an i
   await assert.rejects(collectCandidates(malformed, { now }), /invalid pagination/);
 });
 
-test('filter skips blocked/deleted/fresh/low-discovery titles while prioritising changed titles and deferring overflow', () => {
+test('filter skips blocked/deleted/fresh/low-discovery titles while prioritising new titles, then changed titles, and deferring overflow', () => {
   const candidate = (id: number, extra: Partial<Candidate> = {}): Candidate => ({ id, type: 'movie', changed: false, ...extra });
   const state = (id: number, extra: Partial<ExistingTitleState> = {}): ExistingTitleState => ({ id, type: 'movie', slug: `existing-${id}`, updated_at: now.toISOString(), ...extra });
   const candidates = [candidate(1), candidate(2), candidate(3), candidate(4), candidate(5, { changed: true, popularity: 1 }), candidate(6),
@@ -93,8 +93,8 @@ test('filter skips blocked/deleted/fresh/low-discovery titles while prioritising
   ]);
   const original = JSON.stringify(candidates);
   const result = filterCandidates(candidates, { existing, blocklist: new Set(['movie:1']), now, maxTitles: 3 });
-  assert.deepEqual(result.selected.map(item => item.id), [5, 10, 9]);
-  assert.deepEqual(result.deferred.map(item => item.id), [6, 8, 14]);
+  assert.deepEqual(result.selected.map(item => item.id), [10, 9, 8]);
+  assert.deepEqual(result.deferred.map(item => item.id), [5, 6, 14]);
   assert.deepEqual(Object.fromEntries(result.skipped.map(item => [item.candidate.id, item.reason])), {
     0: 'invalid-id-or-type', 1: 'blocklisted', 2: 'deleted', 3: 'deleted', 4: 'fresh', 7: 'below-discovery-gate', 11: 'adult', 13: 'below-discovery-gate',
   });

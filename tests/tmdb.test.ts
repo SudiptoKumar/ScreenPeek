@@ -81,7 +81,7 @@ test('seasons include season zero and custom source bases retain their prefix', 
   assert.equal(calls[1].pathname, '/v3/person/123');
 });
 
-test('the default cap keeps at most five requests active until their bodies finish', async () => {
+test('the default cap keeps at most ten requests active until their bodies finish', async () => {
   const releases: Array<() => void> = [];
   let started = 0, active = 0, maximum = 0, completed = 0;
   const instance = client({ fetch: fakeFetch(() => {
@@ -103,13 +103,13 @@ test('the default cap keeps at most five requests active until their bodies fini
   }));
   try {
     await nextTurn();
-    assert.equal(started, 5, 'queued calls must not start while five response bodies remain unread');
+    assert.equal(started, 10, 'queued calls must not start while ten response bodies remain unread');
     for (let wave = 0; wave < 20 && completed < 12; wave++) {
       releases.splice(0).forEach(release => release());
       await nextTurn();
     }
     assert.equal((await Promise.all(requests)).length, 12);
-    assert.equal(maximum, 5);
+    assert.equal(maximum, 10);
     assert.equal(active, 0);
   } finally {
     releases.splice(0).forEach(release => release());
@@ -231,7 +231,7 @@ test('constructor rejects missing credentials, unsafe source bases, and invalid 
     assert.throws(() => client({ baseUrl }), /HTTPS|credentials|query/);
     assert.throws(() => client({ imageBaseUrl: baseUrl }), /HTTPS|credentials|query/);
   }
-  for (const concurrency of [0, 6, 1.5, NaN]) assert.throws(() => client({ concurrency }), /concurrency/);
+  for (const concurrency of [0, 11, 1.5, NaN]) assert.throws(() => client({ concurrency }), /concurrency/);
   for (const maxRetries of [-1, 9, 1.5]) assert.throws(() => client({ maxRetries }), /maxRetries/);
   for (const timeoutMs of [0, -1, 1.5]) assert.throws(() => client({ timeoutMs }), /timeout/);
   assert.ok(tmdbFromEnv({ TMDB_READ_TOKEN: testToken }) instanceof TmdbClient);
