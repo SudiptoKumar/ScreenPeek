@@ -30,7 +30,7 @@ export function fixtureSource(count = 50): SyncSource & { downloads: () => numbe
       return page(type === 'person' ? people.map(person => ({ id: person.id })) : titles.filter(title => title.media_type === type).map(title => ({ id: title.id })), requested);
     },
     async discovery(list: DiscoveryList, requested = 1) {
-      const type: MediaType | undefined = list === 'trending' ? undefined : ['now_playing', 'upcoming'].includes(list) ? 'movie' : 'tv';
+      const type: MediaType | undefined = list === 'trending' ? undefined : ['now_playing', 'upcoming', 'top_rated'].includes(list) ? 'movie' : 'tv';
       return page<TmdbSummary>(titles.filter(title => !type || title.media_type === type), requested);
     },
     async details<T>(type: MediaType, id: number): Promise<T> {

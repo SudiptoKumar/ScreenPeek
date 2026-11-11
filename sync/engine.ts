@@ -84,6 +84,27 @@ export async function runSync(options: {
     // selection consumed the whole budget and zero titles were stored.
     const work = await prepareCandidates(client, filtered.selected, { existing, now, usedSlugs, popularityGate: threshold, forceImport: manual, deadlineMs: start + Math.floor(duration / 2) });
     console.info(`Sync timing: prepare took ${Math.round(performance.now() - start)}ms for ${work.prepared.length} titles (${filtered.selected.length} selected).`);
+    // Owner rule (2026-11-11): a series is extracted only while its total
+    // episode count is at most 12. Longer series are dropped for good —
+    // the queue row is deleted so they are not re-selected on later runs.
+    // (Series already in the catalogue are untouched; this gates intake.)
+    {
+      const kept: typeof work.prepared = [];
+      let droppedSeries = 0;
+      for (const item of work.prepared) {
+        if (item.candidate.type === 'tv') {
+          const totalEpisodes = item.data.seasons.reduce((sum, season) => sum + (season.episode_count || 0), 0);
+          if (totalEpisodes > 12) {
+            droppedSeries++;
+            await batch([{ sql: 'DELETE FROM sync_queue WHERE title_id=? AND title_type=?', params: [item.candidate.id, item.candidate.type] }]);
+            continue;
+          }
+        }
+        kept.push(item);
+      }
+      if (droppedSeries) console.info(`Sync: dropped ${droppedSeries} series over the 12-episode limit.`);
+      work.prepared = kept;
+    }
     const changedPeople = new Set([...collected.personIds, ...(options.personIds || [])]);
     const processedPeople = new Set<number>();
     const providerLogos = new Map<number, string | null>();

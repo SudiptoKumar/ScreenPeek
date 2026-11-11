@@ -1,6 +1,6 @@
 import type { MediaType, TmdbSummary } from './tmdb.ts';
 
-export interface Candidate extends TmdbSummary { type: MediaType; changed: boolean; }
+export interface Candidate extends TmdbSummary { type: MediaType; changed: boolean; topRated?: boolean; }
 export interface ExistingTitleState extends Record<string, unknown> {
   id: number; type: MediaType; slug: string; updated_at: string;
   locked_fields?: string; hidden?: number; deleted?: number; deleted_at?: string | null;

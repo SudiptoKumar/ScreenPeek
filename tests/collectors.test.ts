@@ -11,7 +11,7 @@ const emptyClient = (): Pick<TmdbClient, 'changes' | 'discovery'> => ({
   discovery: async (_list, current = 1) => page([], current, 0),
 });
 
-test('collects every changes page and at most three discovery pages, merges metadata and excludes invalid/adult/person entries', async () => {
+test('collects every changes page, three pages per discovery list plus the top-rated movies, merges metadata and excludes invalid/adult/person entries', async () => {
   const calls: string[] = [];
   const client: Pick<TmdbClient, 'changes' | 'discovery'> = {
     changes: async (type, start, end, current = 1) => {
@@ -31,11 +31,13 @@ test('collects every changes page and at most three discovery pages, merges meta
       if (list === 'now_playing') return page([{ id: 4, title: 'Changed movie', popularity: 20 }, { id: 2 }, { id: 5, adult: true }, { id: 1.5 }], current);
       if (list === 'upcoming') return page(current === 1 ? [{ id: 6, popularity: 30, poster_path: '/poster.jpg' }] : [{ id: 6, popularity: 60, poster_path: null }], current, 2);
       if (list === 'on_the_air') return page([], current, 0);
+      if (list === 'top_rated') return page([{ id: 6, popularity: 30, poster_path: '/poster.jpg' }], current);
       return page([{ id: 7, popularity: 5 }], current);
     },
   };
   const result = await collectCandidates(client, { now });
-  assert.equal(calls.length, 13);
+  assert.equal(calls.length, 14);
+  assert.ok(calls.includes('discovery:top_rated:1'));
   assert.ok(calls.includes('changes:movie:2'));
   assert.ok(calls.includes('changes:person:2'));
   assert.ok(calls.includes('discovery:trending:3'));
@@ -46,6 +48,8 @@ test('collects every changes page and at most three discovery pages, merges meta
   assert.equal(result.titles.find(candidate => candidate.id === 4)?.title, 'Changed movie');
   assert.equal(result.titles.find(candidate => candidate.id === 6)?.popularity, 60);
   assert.equal(result.titles.find(candidate => candidate.id === 6)?.poster_path, '/poster.jpg');
+  assert.equal(result.titles.find(candidate => candidate.id === 6)?.topRated, true);
+  assert.equal(result.titles.find(candidate => candidate.id === 1)?.topRated, undefined);
   assert.deepEqual(result.personIds, [8, 10]);
   assert.equal(result.needsReconciliation, false);
 });

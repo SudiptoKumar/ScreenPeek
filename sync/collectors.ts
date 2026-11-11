@@ -53,11 +53,15 @@ export async function collectCandidates(
   const window = { startDate: new Date(start).toISOString().slice(0, 10), endDate: new Date(now).toISOString().slice(0, 10) };
   const needsReconciliation = lastSuccess !== undefined && now - lastSuccess > 14 * day;
   // Independent feeds run together. The shared client still enforces its five-request cap.
-  const [movies, tv, people, discovery] = await Promise.all([
+  const [movies, tv, people, discovery, topRated] = await Promise.all([
     pages(page => client.changes('movie', window.startDate, window.endDate, page)),
     pages(page => client.changes('tv', window.startDate, window.endDate, page)),
     pages(page => client.changes('person', window.startDate, window.endDate, page)),
     Promise.all(discoveryLists.map(list => pages(page => client.discovery(list, page), 3))),
+    // The all-time top movies (the IMDb Top 250 idea, from TMDb's own
+    // top-rated list): 13 pages ≈ 260 titles, marked so the selection
+    // below always puts them first.
+    pages(page => client.discovery('top_rated', page), 13),
   ]);
   const titles = new Map<string, Candidate>();
   const adults = new Set<string>();
@@ -80,6 +84,12 @@ export async function collectCandidates(
       if (summary.adult === true) { adults.add(key); continue; }
       titles.set(key, merge(titles.get(key), { ...summary, type, changed: false }));
     }
+  }
+  for (const summary of topRated) {
+    if (!validId(summary.id) || summary.media_type === 'person') continue;
+    const key = titleKey('movie', summary.id);
+    if (summary.adult === true) { adults.add(key); continue; }
+    titles.set(key, merge(titles.get(key), { ...summary, type: 'movie', changed: false, topRated: true }));
   }
   const adultPeople = new Set(people.filter(person => person.adult === true).map(person => person.id));
   const personIds = [...new Set(people.filter(person => validId(person.id) && !adultPeople.has(person.id)).map(person => person.id))].sort((a, b) => a - b);
@@ -140,6 +150,10 @@ export function filterCandidates(
     if (reason) skipped.push({ candidate, reason });
     else eligible.push(candidate);
   }
-  eligible.sort((a, b) => Number(b.changed) - Number(a.changed) || popularity(b) - popularity(a) || identityOrder(a, b));
+  // Owner's extraction order (2026-11-11): top-rated movies first, then
+  // all other movies, then series — popularity decides inside each tier.
+  eligible.sort((a, b) => Number(b.topRated === true) - Number(a.topRated === true)
+    || (a.type === b.type ? 0 : a.type === 'movie' ? -1 : 1)
+    || Number(b.changed) - Number(a.changed) || popularity(b) - popularity(a) || identityOrder(a, b));
   return { selected: eligible.slice(0, maxTitles), deferred: eligible.slice(maxTitles), skipped };
 }

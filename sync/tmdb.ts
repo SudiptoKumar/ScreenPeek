@@ -1,6 +1,6 @@
 /** All source URL knowledge stays here. Import this module from sync/ only. */
 export type MediaType = 'movie' | 'tv';
-export type DiscoveryList = 'trending' | 'now_playing' | 'upcoming' | 'on_the_air' | 'airing_today';
+export type DiscoveryList = 'trending' | 'now_playing' | 'upcoming' | 'on_the_air' | 'airing_today' | 'top_rated';
 export interface TmdbPage<T> { page: number; total_pages: number; results: T[]; }
 export interface TmdbSummary {
   id: number; media_type?: MediaType | 'person'; title?: string; name?: string;
@@ -148,7 +148,7 @@ export class TmdbClient {
   discovery(list: DiscoveryList, page = 1) {
     const paths: Record<DiscoveryList, string> = {
       trending: 'trending/all/day', now_playing: 'movie/now_playing', upcoming: 'movie/upcoming',
-      on_the_air: 'tv/on_the_air', airing_today: 'tv/airing_today',
+      on_the_air: 'tv/on_the_air', airing_today: 'tv/airing_today', top_rated: 'movie/top_rated',
     };
     if (!Object.hasOwn(paths, list)) throw new Error('Unknown discovery list');
     return this.json<TmdbPage<TmdbSummary>>(paths[list], { page: this.page(page) });
