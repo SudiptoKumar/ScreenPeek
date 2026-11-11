@@ -1,0 +1,27 @@
+---
+import Base from '../../layouts/Base.astro';
+import AdStack from '../../components/AdStack.astro';
+import PosterCard from '../../components/PosterCard.astro';
+import { env } from 'cloudflare:workers';
+import { sampleMode, topRatedTitles } from '../../lib/catalogue';
+let sample = false, failed = false;
+let rated: Awaited<ReturnType<typeof topRatedTitles>> = { movies: [], series: [] };
+try { sample = await sampleMode(env.DB); rated = await topRatedTitles(env.DB, sample); } catch { failed = true; Astro.response.status = 503; }
+Astro.response.headers.set('Cache-Control', sample || failed ? 'no-store' : 'public, s-maxage=3600, stale-while-revalidate=604800');
+---
+<Base title="Top Rated movies & series" sample={sample} noindex={sample || failed} pageType={failed ? 'utility' : 'list'}>
+  <section class="intro"><p class="eyebrow">THE HIGHEST RATED</p>
+    <h1>Top Rated</h1>
+    <p>The best-loved movies and series in the catalogue, ranked by audience score.</p>
+  </section>
+  {failed ? <section class="empty-state"><h2>The catalogue is temporarily unavailable.</h2><p>Please try again shortly.</p></section> : <>
+    <AdStack pageType="list" placement="top_300x250" />
+    <section class="catalogue-section" aria-labelledby="top-movies-title"><div class="section-heading"><h2 id="top-movies-title">Top Rated Movies</h2></div>
+      {rated.movies.length ? <div class="poster-grid">{rated.movies.map(title => <PosterCard title={title} mediaBase={env.R2_PUBLIC_BASE} />)}</div> : <p class="quiet-empty">Top rated movies will appear after the next catalogue update.</p>}
+    </section>
+    <AdStack pageType="list" placement="native" />
+    <section class="catalogue-section" aria-labelledby="top-series-title"><div class="section-heading"><h2 id="top-series-title">Top Rated Series</h2></div>
+      {rated.series.length ? <div class="poster-grid">{rated.series.map(title => <PosterCard title={title} mediaBase={env.R2_PUBLIC_BASE} />)}</div> : <p class="quiet-empty">Top rated series will appear after the next catalogue update.</p>}
+    </section>
+  </>}
+</Base>

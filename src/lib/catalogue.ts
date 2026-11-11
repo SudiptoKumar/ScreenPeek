@@ -80,14 +80,29 @@ export async function homeTitles(db: D1Database, includeUngated = false) {
   const where = visible + (includeUngated ? '' : ' AND t.quality_gate=1');
   const query = async (condition: string, order: string, limit: number) =>
     (await db.prepare(`SELECT ${fields} FROM titles t WHERE ${where} ${condition} ORDER BY ${order},t.id DESC LIMIT ?`).bind(limit).all<TitleCard>()).results;
-  const [trending, top10, movies, series, upcoming, genres] = await Promise.all([
+  const [trending, top10, toprated, movies, series, upcoming, genres] = await Promise.all([
     query('', "CASE WHEN t.pinned=1 AND (t.pin_starts_at IS NULL OR datetime(t.pin_starts_at)<=datetime('now')) AND (t.pin_ends_at IS NULL OR datetime(t.pin_ends_at)>datetime('now')) THEN 1 ELSE 0 END DESC,t.popularity DESC", 6), query('', 't.popularity DESC', 10),
+    query("AND t.type='movie' AND t.vote_count>=200", 't.vote_average DESC,t.vote_count DESC', 10),
     query("AND t.type='movie'", 't.added_at DESC', 6), query("AND t.type='tv'", 't.added_at DESC', 6),
     query("AND t.release_date>date('now')", 't.release_date ASC', 6),
-    db.prepare(`SELECT g.slug,COALESCE(NULLIF(o.display_name,''),g.name) name,g.title_count FROM genres g LEFT JOIN taxonomy_overrides o ON o.kind='genre' AND o.slug=g.slug AND o.deleted_at IS NULL WHERE g.title_count>0 AND COALESCE(o.hidden,0)=0 ORDER BY COALESCE(o.ord,0),g.title_count DESC,name LIMIT 12`).all<{ slug: string; name: string; title_count: number }>(),
+    db.prepare(`SELECT g.slug,COALESCE(NULLIF(o.display_name,''),g.name) name,g.title_count FROM genres g LEFT JOIN taxonomy_overrides o ON o.kind='genre' AND o.slug=g.slug AND o.deleted_at IS NULL WHERE g.title_count>0 AND COALESCE(o.hidden,0)=0 ORDER BY COALESCE(o.ord,0),g.title_count DESC,name LIMIT 50`).all<{ slug: string; name: string; title_count: number }>(),
   ]);
   // 6+6+6+6 poster cards maximum; Top10 is a text-only ranked list.
-  return { trending, top10, movies, series, upcoming, genres: genres.results };
+  return { trending, top10, toprated, movies, series, upcoming, genres: genres.results };
+}
+
+/** Every genre that has titles, for the /genres/ index page (no cap). */
+export async function allGenres(db: D1Database) {
+  return (await db.prepare(`SELECT g.slug,COALESCE(NULLIF(o.display_name,''),g.name) name,g.title_count FROM genres g LEFT JOIN taxonomy_overrides o ON o.kind='genre' AND o.slug=g.slug AND o.deleted_at IS NULL WHERE g.title_count>0 AND COALESCE(o.hidden,0)=0 ORDER BY g.title_count DESC,name`).all<{ slug: string; name: string; title_count: number }>()).results;
+}
+
+/** The /top-rated/ page: best audience scores first, movies then series. */
+export async function topRatedTitles(db: D1Database, includeUngated = false, limit = 48) {
+  const where = visible + (includeUngated ? '' : ' AND t.quality_gate=1');
+  const query = async (type: 'movie' | 'tv') =>
+    (await db.prepare(`SELECT ${fields} FROM titles t WHERE ${where} AND t.type=? AND t.vote_count>=100 ORDER BY t.vote_average DESC,t.vote_count DESC,t.id DESC LIMIT ?`).bind(type, limit).all<TitleCard>()).results;
+  const [movies, series] = await Promise.all([query('movie'), query('tv')]);
+  return { movies, series };
 }
 
 export function titleUrl(title: Pick<TitleCard, 'type' | 'slug'>) {

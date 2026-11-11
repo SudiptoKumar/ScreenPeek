@@ -16,7 +16,7 @@ const taxonomy = `SELECT x.kind,x.slug FROM (
   ) x WHERE NOT EXISTS(SELECT 1 FROM taxonomy_overrides o WHERE o.kind=x.kind AND o.slug=x.slug AND o.hidden<>0 AND o.deleted_at IS NULL)
   AND NOT EXISTS(SELECT 1 FROM seo_overrides s WHERE s.path='/'||x.kind||'/'||x.slug||'/' AND s.noindex=1 AND s.deleted_at IS NULL)`;
 const pageQuery = `SELECT path,updated_at FROM (
-  WITH core(path,type,upcoming) AS (VALUES('/',NULL,0),('/movies/','movie',0),('/series/','tv',0),('/new/',NULL,0),('/top10/',NULL,0),('/upcoming/',NULL,1))
+  WITH core(path,type,upcoming) AS (VALUES('/',NULL,0),('/movies/','movie',0),('/series/','tv',0),('/new/',NULL,0),('/top10/',NULL,0),('/top-rated/',NULL,0),('/genres/',NULL,0),('/upcoming/',NULL,1))
   SELECT core.path,NULL AS updated_at FROM core WHERE core.path='/' OR EXISTS(SELECT 1 FROM titles t WHERE ${visible} AND (core.type IS NULL OR t.type=core.type) AND (core.upcoming=0 OR t.release_date>date('now')))
   UNION ALL SELECT '/'||slug||'/',updated_at FROM pages WHERE slug IN('about','privacy','dmca','contact') AND length(trim(title))>0 AND length(trim(body_md))>0
   ) p WHERE NOT EXISTS(SELECT 1 FROM seo_overrides o WHERE o.path=p.path AND o.noindex=1 AND o.deleted_at IS NULL)`;

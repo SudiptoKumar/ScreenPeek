@@ -54,7 +54,7 @@ if (pageType !== 'utility' && Astro.url.pathname !== '/' && !structured.some(sch
       <a class="brand" href="/" aria-label={`${site.name} home`}>{logo ? <img src={logo} width="128" height="32" alt={site.name} /> : site.name === 'ScreenPeek' ? <>Screen<span>Peek</span></> : site.name}</a>
       <nav class="desktop-nav" aria-label="Main navigation">
         <a href="/movies/">Movies</a><a href="/series/">Series</a>
-        <a href="/top10/">Top 10</a><a href="/upcoming/">Upcoming</a><a href="/mylist/">My List</a>
+        <a href="/top10/">Top 10</a><a href="/top-rated/">Top Rated</a><a href="/genres/">Genres</a><a href="/upcoming/">Upcoming</a><a href="/mylist/">My List</a>
       </nav>
       <form class="header-search" action="/search/" role="search" autocomplete="off"><label class="sr-only" for="search">Search titles</label>
         <input id="search" name="q" type="search" placeholder="Search movies & shows" maxlength="100" autocomplete="off" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-controls="search-suggestions" aria-expanded="false" />
@@ -65,7 +65,7 @@ if (pageType !== 'utility' && Astro.url.pathname !== '/' && !structured.some(sch
         </div>
       </form>
       <details class="mobile-menu"><summary aria-label="Open navigation">Menu</summary>
-        <nav aria-label="Mobile navigation"><a href="/movies/">Movies</a><a href="/series/">Series</a><a href="/top10/">Top 10</a><a href="/upcoming/">Upcoming</a><a href="/mylist/">My List</a></nav>
+        <nav aria-label="Mobile navigation"><a href="/movies/">Movies</a><a href="/series/">Series</a><a href="/top10/">Top 10</a><a href="/top-rated/">Top Rated</a><a href="/genres/">Genres</a><a href="/upcoming/">Upcoming</a><a href="/mylist/">My List</a></nav>
       </details>
     </header>
     <main id="content">
@@ -74,6 +74,7 @@ if (pageType !== 'utility' && Astro.url.pathname !== '/' && !structured.some(sch
       <p class="sr-only" data-library-status role="status" aria-live="polite"></p>
     </main>
     <footer class="site-footer">
+      <nav aria-label="Browse"><a href="/movies/">Movies</a><a href="/series/">Series</a><a href="/top-rated/">Top Rated</a><a href="/genres/">Genres</a><a href="/top10/">Top 10</a><a href="/upcoming/">Upcoming</a></nav>
       <nav aria-label="Information"><a href="/about/">About</a><a href="/privacy/">Privacy</a><a href="/dmca/">DMCA</a><a href="/contact/">Contact</a></nav>
       {site.socials.length > 0 && <nav aria-label="Social links">{site.socials.map(link => <a href={`/go/${link.slug}/`} rel="sponsored nofollow noopener" target="_blank" data-no-popunder>{link.name}</a>)}</nav>}
       {site.tagline && <p>{site.tagline}</p>}

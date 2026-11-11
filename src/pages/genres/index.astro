@@ -1,0 +1,18 @@
+---
+import Base from '../../layouts/Base.astro';
+import AdStack from '../../components/AdStack.astro';
+import { env } from 'cloudflare:workers';
+import { allGenres, sampleMode } from '../../lib/catalogue';
+let sample = false, failed = false;
+let genres: Awaited<ReturnType<typeof allGenres>> = [];
+try { sample = await sampleMode(env.DB); genres = await allGenres(env.DB); } catch { failed = true; Astro.response.status = 503; }
+Astro.response.headers.set('Cache-Control', sample || failed ? 'no-store' : 'public, s-maxage=3600, stale-while-revalidate=604800');
+---
+<Base title="All genres" sample={sample} noindex={sample || failed} pageType={failed ? 'utility' : 'list'}>
+  <section class="intro"><p class="eyebrow">BROWSE BY GENRE</p>
+    <h1>All genres</h1>
+    <p>Every kind of story in the catalogue — pick a genre and start exploring.</p>
+  </section>
+  {failed ? <section class="empty-state"><h2>The catalogue is temporarily unavailable.</h2><p>Please try again shortly.</p></section> : genres.length ? <section class="catalogue-section" aria-label="All genres"><div class="category-grid">{genres.map((genre, index) => <a class="category-tile" href={`/genre/${genre.slug}/`}><span class="category-number" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span><strong>{genre.name}</strong><small>{genre.title_count} {genre.title_count === 1 ? 'title' : 'titles'}</small><span class="category-arrow" aria-hidden="true">↗</span></a>)}</div></section> : <p class="quiet-empty">Genres will appear after the next catalogue update.</p>}
+  {!failed && <AdStack pageType="list" placement="native" />}
+</Base>
