@@ -4,7 +4,7 @@ on:
   schedule:
     # Four times a day while the deferred backlog drains; revisit once
     # the queue is empty (a single daily run then suffices).
-    - cron: '30 2,8,14,20 * * *'
+    - cron: '30 2,5,8,11,14,17,20,23 * * *'
   workflow_dispatch:
     inputs:
       ids:

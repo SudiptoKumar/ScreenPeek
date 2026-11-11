@@ -39,7 +39,9 @@ export async function runSync(options: {
   const summary: SyncSummary = { status: 'failed', source: options.source || 'cron', startedAt: now.toISOString(), finishedAt: now.toISOString(), added: 0, updated: 0, errors: [] };
   let logId: number | undefined;
   let rowsWritten = 0;
-  const budget = Math.min(options.writeBudget ?? 50_000, 80_000);
+  let budget = Math.min(options.writeBudget ?? 50_000, 80_000);
+  let dailyRowsBase = 0;
+  const writeDay = now.toISOString().slice(0, 10);
   const duration = options.maxDurationMs ?? 12 * 60_000;
   const warn = (message: string) => { if (summary.errors.length < 100) summary.errors.push(message); };
   const batch = async (statements: SqlStatement[]) => { rowsWritten += (await db.batch(statements)).rowsWritten; };
@@ -71,10 +73,26 @@ export async function runSync(options: {
       } catch { warn('An invalid queued candidate was ignored.'); }
     }
     const manual = Boolean(options.targets || options.personIds);
+    // Daily write governor: D1's free plan allows 100,000 written rows a
+    // day (UTC) across the whole system (sync, money checker, panel).
+    // Scheduled runs share a soft ceiling of 85,000, tracked in the
+    // sync_write_day config counter, so running more often can never
+    // starve everything else. Runs with an explicit budget (tests) skip
+    // the cap; every run still records what it wrote.
+    if (options.writeBudget === undefined) {
+      try {
+        const saved = JSON.parse(config.sync_write_day || '{}') as { day?: string; rows?: number };
+        if (saved.day === writeDay && Number.isFinite(saved.rows)) dailyRowsBase = Math.max(0, Math.floor(saved.rows!));
+      } catch { /* A corrupt counter must never block the sync. */ }
+      if (!manual) budget = Math.min(budget, Math.max(1_000, 85_000 - dailyRowsBase));
+    }
     // Owner's catalogue build (2026-11-11): add 500 movies + 100 series a
-    // day (shaped per run: 125 movies + 25 series x 4 runs) until the
-    // catalogue holds 5,000 complete movies and 2,000 complete series;
-    // past a goal, that type drops to a small latest-only trickle.
+    // day until the catalogue holds 5,000 complete movies and 2,000
+    // complete series; past a goal, that type drops to a small
+    // latest-only trickle. The per-run shaping (63 movies + 13 series x
+    // 8 runs) is set by the sync_movie_cap / sync_series_cap config keys
+    // in production; the code defaults stay generous so a bare database
+    // (or a bulk local import) is never paced by accident.
     // "Complete" = the poster is stored (poster_r2 set). Manual targeted
     // imports bypass the caps, like they bypass the popularity gate.
     let perTypeMax: Partial<Record<MediaType, number>> | undefined;
@@ -123,6 +141,23 @@ export async function runSync(options: {
       if (droppedSeries) console.info(`Sync: dropped ${droppedSeries} series over the 12-episode limit.`);
       work.prepared = kept;
     }
+    // Interleave series into the movie stream 5:1, so a run that runs
+    // out of clock still lands some of both (the owner's daily 500 + 100
+    // shape). Relative order inside each type is preserved, so top-rated
+    // movies still lead the movie stream.
+    {
+      const movies = work.prepared.filter(item => item.candidate.type === 'movie');
+      const series = work.prepared.filter(item => item.candidate.type === 'tv');
+      if (movies.length && series.length) {
+        const interleaved: typeof work.prepared = [];
+        let mi = 0, si = 0;
+        while (mi < movies.length || si < series.length) {
+          for (let k = 0; k < 5 && mi < movies.length; k++) interleaved.push(movies[mi++]);
+          if (si < series.length) interleaved.push(series[si++]);
+        }
+        work.prepared = interleaved;
+      }
+    }
     const changedPeople = new Set([...collected.personIds, ...(options.personIds || [])]);
     const processedPeople = new Set<number>();
     const providerLogos = new Map<number, string | null>();
@@ -136,9 +171,21 @@ export async function runSync(options: {
         ]);
       } else deferred.push(failure.candidate);
     }
-    // Remove stale/blocked queued work too; owner deletes must not be resurrected.
-    for (const item of [...filtered.skipped.map(row => row.candidate), ...work.skipped.map(row => row.candidate)]) {
-      await batch([{ sql: 'DELETE FROM sync_queue WHERE title_id=? AND title_type=?', params: [item.id, item.type] }]);
+    // Remove stale/blocked queued work too; owner deletes must not be
+    // resurrected. Only rows actually sitting in the queue are deleted,
+    // in batches — one request per skipped candidate burned minutes of
+    // every run on no-ops (most skipped candidates were never queued).
+    {
+      const queuedKeys = new Set(queued.map(candidate => titleKey(candidate.type, candidate.id)));
+      const seen = new Set<string>();
+      const statements: SqlStatement[] = [];
+      for (const candidate of [...filtered.skipped.map(row => row.candidate), ...work.skipped.map(row => row.candidate)]) {
+        const key = titleKey(candidate.type, candidate.id);
+        if (!queuedKeys.has(key) || seen.has(key)) continue;
+        seen.add(key);
+        statements.push({ sql: 'DELETE FROM sync_queue WHERE title_id=? AND title_type=?', params: [candidate.id, candidate.type] });
+      }
+      for (let offset = 0; offset < statements.length; offset += 100) await batch(statements.slice(offset, offset + 100));
     }
     async function syncPerson(person: SourcePerson, allowCreditFallback = true) {
       if (processedPeople.has(person.id) || blocked.has(`person:${person.id}`) || people.get(person.id)?.deleted_at) return;
@@ -269,7 +316,13 @@ export async function runSync(options: {
     // rewriting ~20k identical queue rows every night would burn most of
     // the daily D1 write budget on no-ops.
     const alreadyQueued = new Set(queued.map(candidate => titleKey(candidate.type, candidate.id)));
-    const toQueue = deferred.filter(candidate => !alreadyQueued.has(titleKey(candidate.type, candidate.id)));
+    // Prepared-but-unstored candidates (already fetched — the valuable
+    // ones) re-queue first; never-prepared deferred candidates fill the
+    // remaining room up to a per-run cap, so a huge changes day cannot
+    // burn the daily write budget on queue rows alone.
+    const unprepared = new Set(filtered.deferred);
+    const orderedDeferred = [...deferred.filter(candidate => !unprepared.has(candidate)), ...deferred.filter(candidate => unprepared.has(candidate))];
+    const toQueue = orderedDeferred.filter(candidate => !alreadyQueued.has(titleKey(candidate.type, candidate.id))).slice(0, 500);
     for (let offset = 0; offset < toQueue.length; offset += 100) {
       if (rowsWritten >= 80_000) { warn('Queue write safety cap reached; catch-up window remains open.'); break; }
       await batch(toQueue.slice(offset, offset + 100).map(candidate => ({
@@ -302,6 +355,12 @@ export async function runSync(options: {
   if (logId) {
     try { await finishSyncLog(db, logId, summary); }
     catch (error) { console.error('Sync log finalize failure:', error); summary.status = 'failed'; warn('Could not finalize the sync log.'); }
+  }
+  // Record this run's writes in the daily counter the governor reads.
+  if (options.writeBudget === undefined && rowsWritten > 0) {
+    try {
+      await db.batch([{ sql: "INSERT INTO config(key,value,revision) VALUES('sync_write_day',?,1) ON CONFLICT(key) DO UPDATE SET value=excluded.value, revision=revision+1", params: [JSON.stringify({ day: writeDay, rows: dailyRowsBase + rowsWritten })] }]);
+    } catch { /* Best effort: a missed recording only loosens the cap slightly. */ }
   }
   const alert = await notifyFailure(options.environment || {}, summary);
   if (alert.warning) {
