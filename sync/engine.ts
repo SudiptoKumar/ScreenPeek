@@ -197,7 +197,7 @@ export async function runSync(options: {
         // A deadline stop mid-title is a deferral, not a failure: the
         // title keeps its queue row and resumes next run (every episode
         // and image already saved stays saved).
-        if (!overTime()) warn(`${candidate.type}:${candidate.id}: persistence failed; candidate retained for retry.`);
+        if (!overTime()) { console.error(`Title persistence failure ${candidate.type}:${candidate.id}:`, error); warn(`${candidate.type}:${candidate.id}: persistence failed; candidate retained for retry.`); }
       }
     }
     await purgeExpiredTrash({query:db.query.bind(db),batch:async statements=>{const result=await db.batch(statements);rowsWritten+=result.rowsWritten;return result;}},clock(),Math.min(1000,Math.max(0,Math.floor((budget-rowsWritten)/10))));
