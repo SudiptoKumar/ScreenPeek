@@ -4,6 +4,7 @@ import BackupSnapshots from './BackupSnapshots.astro';
 import UniversalList from './UniversalList.astro';
 import AdminAdvanced from './AdminAdvanced.astro';
 import AdminTools from './AdminTools.astro';
+import TrackingPanel from './TrackingPanel.astro';
 import AdminBase from '../../layouts/AdminBase.astro';
 import { env } from 'cloudflare:workers';
 import { healthReport } from '../../lib/admin/health';
@@ -14,7 +15,7 @@ import { adMap } from '../../lib/ads';
 import { dhakaInput, settingsFields } from '../../lib/admin/actions';
 interface Props { module: AdminModule; actor?: AdminIdentity; data?: AdminData; error?: string; message?: string; jobUrl?: string; platformAds?: boolean; secrets?: Array<{ name: string; set: boolean }>; submitted?: URLSearchParams; }
 const { module, actor, data, error, message, jobUrl, platformAds = false, secrets = [], submitted } = Astro.props;
-const modules = { dashboard: 'Dashboard', links: 'Links & Offers', ads: 'Ads', content: 'Show / Hide', pages: 'Info Pages', sync: 'Sync', settings: 'Settings', backup: 'Backup', seo: 'SEO', changes: 'History', titles: 'Edit Titles', people: 'Edit People', tools: 'Tools' } as const;
+const modules = { dashboard: 'Dashboard', links: 'Links & Offers', ads: 'Ads', content: 'Show / Hide', pages: 'Info Pages', sync: 'Sync', settings: 'Settings', backup: 'Backup', seo: 'SEO', changes: 'History', titles: 'Edit Titles', people: 'Edit People', tools: 'Tools', tracking: 'Tracking' } as const;
 const formatNames: Record<number, string> = { 32197577: 'Top banner · 300×250', 32197602: 'Sticky banner · 320×50', 32197641: 'Native ads', 32197642: 'Popunder', 32197643: 'Social Bar' };
 const heading = modules[module as keyof typeof modules] || 'Admin';
 const canWrite = actor && permitted(actor, module, true);
@@ -54,6 +55,7 @@ const syncTone = !syncStatusText ? 'off' : syncStatusText.toLowerCase() === 'run
     {!error && ['links','ads','content','pages','sync','seo','changes','titles','people'].includes(module) && <UniversalList actor={actor} module={module} />}
     {['seo','changes'].includes(module) && <AdminAdvanced module={module} actor={actor} />}
     {module === 'tools' && <AdminTools actor={actor} data={data} />}
+    {module === 'tracking' && <TrackingPanel actor={actor} overview={data.tracking} />}
         {module === 'dashboard' && <>
       {healthIssues.length > 0 ? <a class="health-strip" href="#not-working"><span class="health-strip-count">{healthIssues.length}</span><span class="health-strip-text"><strong>{healthIssues.length} {healthIssues.length === 1 ? 'thing needs' : 'things need'} attention</strong><small>{healthIssues[0].message}</small></span><span class="health-strip-view">View <svg class="link-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span></a> : <p class="health-ok health-ok-front"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>All OK — nothing needs fixing right now.</p>}
       <h2 class="wall-heading">Revenue — Adsterra</h2>

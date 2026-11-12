@@ -1,0 +1,45 @@
+---
+import type { AdminIdentity } from '../../lib/admin/access';
+import type { TrackingOverview } from '../../lib/admin/tracking-data';
+import { TRACKING_VIEWS, trackingView } from '../../lib/admin/tracking-data';
+interface Props { actor: AdminIdentity; overview: TrackingOverview | null; }
+const { actor, overview } = Astro.props;
+const view = trackingView(Astro.url);
+const viewLabels: Record<string, string> = { overview: 'Overview', clicks: 'Clicks', pages: 'Pages', sessions: 'Sessions', conversions: 'Conversions', quality: 'Quality', charts: 'Charts', export: 'Export', settings: 'Settings', tools: 'Tools' };
+const money = (minor: number, currency: string) => `${currency} ${(minor / 100).toFixed(2)}`;
+const quotaPct = overview ? Math.min(100, Math.round((overview.storedRaw / Math.max(1, overview.cfg.dailyCap)) * 100)) : 0;
+const icon = (paths: string) => paths;
+const icons = {
+  click: '<path d="m9 9 5 12 1.8-5.2L21 14Z"/><path d="M7.2 2.2 8 5.1"/><path d="m5.1 8-2.9-.8"/><path d="M14 4.1 12 6"/><path d="m6 2-1.9 2"/>',
+  chart: '<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M7 15v-4"/><path d="M12 15V7"/><path d="M17 15v-7"/>',
+  users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  gauge: '<path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/>',
+  dollar: '<line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
+  eye: '<path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0"/><circle cx="12" cy="12" r="3"/>',
+};
+---
+<nav class="hub-navigation" aria-label="Tracking views">{TRACKING_VIEWS.map(name => <a href={name === 'overview' ? '/admin/tracking/' : `/admin/tracking/?view=${name}`} aria-current={view === name ? 'page' : undefined}>{viewLabels[name]}</a>)}</nav>
+{!overview && <section class="empty-state"><h2>Tracking data is unavailable</h2><p>The tracking tables could not be read. If this is a fresh install, the Insight migration may not be applied yet — nothing else in the admin is affected.</p></section>}
+{overview && view === 'overview' && <>
+  {!overview.cfg.enabled && <section class="empty-state"><h2>Tracking is off</h2><p>ScreenPeek Insight is installed but switched off, so nothing is being collected and the public site behaves exactly as before. Turn it on in the Tracking Settings view when you are ready — data starts flowing with the next click.</p>{actor.role === 'owner' && <a class="button primary" href="/admin/tracking/?view=settings">Open Tracking Settings</a>}</section>}
+  {overview.cfg.enabled && overview.cfg.degraded && <p class="notice admin-error" role="alert">Quota storage is degraded: the daily raw-data counter could not be read or written reliably, so collection may pause early today. Totals below still count every click.</p>}
+  {overview.cfg.enabled && overview.quotaCapped && <p class="notice" role="status">Today's raw-data cap of {overview.cfg.dailyCap.toLocaleString()} records is full. New raw rows are being skipped for the rest of the UTC day; the totals below keep counting everything.</p>}
+  <div class="widget-wall">
+    <section class="widget"><h2><svg class="widget-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" set:html={icon(icons.click)}></svg>Clicks today</h2><p class="admin-big">{overview.clicksToday.toLocaleString()}</p><small>All clicks, counted in full (UTC day {overview.day})</small></section>
+    <section class="widget"><h2><svg class="widget-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" set:html={icon(icons.users)}></svg>Unique visitors</h2><p class="admin-big">{overview.uniqueVisitorsToday.toLocaleString()}</p><small>From stored clicks — the raw sample, not the full total</small></section>
+    <section class="widget"><h2><svg class="widget-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" set:html={icon(icons.chart)}></svg>Conversions today</h2><p class="admin-big">{overview.conversionsToday.toLocaleString()}</p><small>Attributed to the day of the click</small></section>
+    <section class="widget"><h2><svg class="widget-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" set:html={icon(icons.dollar)}></svg>Revenue today</h2>{overview.revenueToday.length ? overview.revenueToday.map(row => <p class="admin-big">{money(row.revenueMinor, row.currency)}</p>) : <p class="admin-big">—</p>}<small>From postbacks received so far</small></section>
+    <section class="widget"><h2><svg class="widget-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" set:html={icon(icons.eye)}></svg>Pageviews today</h2><p class="admin-big">{overview.pageviewsToday.toLocaleString()}</p><small>{overview.sessionsToday.toLocaleString()} sessions started</small></section>
+    <section class="widget"><h2><svg class="widget-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" set:html={icon(icons.gauge)}></svg>Raw data quota</h2><p class="admin-big">{overview.storedRaw.toLocaleString()} / {overview.cfg.dailyCap.toLocaleString()}</p><small>Stored raw {overview.storedRaw.toLocaleString()} of {overview.totalRaw.toLocaleString()} total today</small><span class="format-track"><span class="format-fill" style={`width:${quotaPct}%;background:#38bdf8`}></span></span></section>
+  </div>
+  <section class="catalogue-section"><h2>Live feed — latest clicks</h2>
+    {overview.liveFeed.length ? <div class="admin-table"><table><thead><tr><th>Time (UTC)</th><th>Link</th><th>Country</th><th>Device</th><th>Destination</th><th>Quality</th><th>Disguise</th></tr></thead><tbody>{overview.liveFeed.map(row => <tr><td>{String(row.ts || '').slice(11, 19)}</td><td>{String(row.slug || '')}<small>{String(row.route_reason || '')}</small></td><td>{String(row.country || '—')}</td><td>{String(row.device_type || '')}{row.device_model ? ` · ${String(row.device_model)}` : ''}</td><td>{String(row.dest_host || '')}</td><td>{String(row.quality_band || 'clean')}</td><td>{row.disguise_score === null || row.disguise_score === undefined ? '—' : `${String(row.disguise_score)} / 100`}</td></tr>)}</tbody></table></div>
+    : <p class="quiet-empty">No clicks recorded yet{overview.cfg.enabled ? ' today — the feed fills as visitors click tracked links.' : ' — tracking is off, so nothing is being collected.'}</p>}
+  </section>
+  <div class="status-row">
+    <section class="catalogue-section"><h2>Top links today</h2>{overview.topLinks.length ? <div class="admin-table"><table><thead><tr><th>Link</th><th>Clicks</th><th>Conv.</th><th>Revenue</th></tr></thead><tbody>{overview.topLinks.map(row => <tr><td>{row.slug}</td><td>{row.clicks.toLocaleString()}</td><td>{row.conversions.toLocaleString()}</td><td>{row.revenue ? (row.revenue / 100).toFixed(2) : '—'}</td></tr>)}</tbody></table></div> : <p class="quiet-empty">No link clicks yet today.</p>}</section>
+    <section class="catalogue-section"><h2>Top countries today</h2>{overview.topCountries.length ? <div class="admin-table"><table><thead><tr><th>Country</th><th>Clicks</th></tr></thead><tbody>{overview.topCountries.map(row => <tr><td>{row.country || 'Unknown'}</td><td>{row.clicks.toLocaleString()}</td></tr>)}</tbody></table></div> : <p class="quiet-empty">No country data yet today.</p>}</section>
+    <section class="catalogue-section"><h2>Postbacks — last 24 hours</h2>{overview.postbackResults.length ? <div class="admin-table"><table><thead><tr><th>Result</th><th>Calls</th></tr></thead><tbody>{overview.postbackResults.map(row => <tr><td>{row.result}</td><td>{row.count.toLocaleString()}</td></tr>)}</tbody></table></div> : <p class="quiet-empty">No postbacks received in the last 24 hours. Networks send them after a conversion happens.</p>}</section>
+  </div>
+</>}
+{overview && view !== 'overview' && <section class="empty-state"><h2>{viewLabels[view]}</h2><p>This view is part of the Insight build and arrives with its own step — the Overview is live now.</p></section>}

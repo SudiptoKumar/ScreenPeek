@@ -8,7 +8,7 @@ import { adminData, exportAdminBackup } from '../../lib/admin/data';
 import type { AdminData } from '../../lib/admin/data';
 import { csvRows, listData, listDefaults, listSpec } from '../../lib/admin/universal';
 import { adminForm, applyAdminAction } from '../../lib/admin/actions';
-const allowed = ['dashboard', 'links', 'ads', 'content', 'pages', 'sync', 'settings', 'backup', 'seo', 'changes', 'titles', 'people', 'tools'];
+const allowed = ['dashboard', 'links', 'ads', 'content', 'pages', 'sync', 'settings', 'backup', 'seo', 'changes', 'titles', 'people', 'tools', 'tracking'];
 const module = (Astro.params.path || 'dashboard') as AdminModule;
 const actor = Astro.locals.admin;
 let data: AdminData | undefined, error = '', message = '', jobUrl: string | undefined, submitted: URLSearchParams | undefined;

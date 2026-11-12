@@ -8,7 +8,7 @@
 
 import { readTrackingConfig, type TrackingConfig } from './config.ts';
 import { QuotaEngine } from './quota.ts';
-import { assessStoredClick } from './quality.ts';
+import { connClassFromOrg, flagsForSignals, tzCountryMismatch } from './quality.ts';
 import { clientInfo, classifyReferrer, maskIp, parseUserAgent } from './parse.ts';
 
 export const newClickId = () => crypto.randomUUID();
@@ -104,9 +104,11 @@ const CLICK_COLUMNS = ['click_id', 'ts', 'slug', 'link_name', 'link_type', 'dest
   'sub1', 'sub2', 'sub3', 'sub4', 'sub5', 'sp_page', 'sp_title', 'is_bot_ua', 'is_test', 'quality_band',
   'quality_flags', 'variant_id', 'conn_class', 'disguise_score', 'disguise_reasons'] as const;
 
-export async function captureClick(env: { DB: D1Database; CONFIG: KVNamespace }, input: ClickCaptureInput): Promise<void> {
+export async function captureClick(env: { DB: D1Database; CONFIG: KVNamespace }, input: ClickCaptureInput & { cfg?: TrackingConfig }): Promise<void> {
   try {
-    const cfg = await readTrackingConfig(env.DB);
+    // Callers on the redirect path pass a config they already read, so
+    // the background capture costs no extra config query (gate G3.6).
+    const cfg = input.cfg ?? await readTrackingConfig(env.DB);
     if (!cfg.enabled) return;
     const row = buildClickRow(input, cfg);
     const day = row.ts.slice(0, 10);
@@ -118,27 +120,38 @@ export async function captureClick(env: { DB: D1Database; CONFIG: KVNamespace },
     });
     const quota = await engine.decide({ kind: 'click', country: row.country }, cfg);
     const statements: D1PreparedStatement[] = [];
+    let uniqueAdd = 0;
     if (quota.decision === 'store') {
+      // One combined lookup feeds both the unique-visitor aggregate and
+      // the quality verdict, so a stored click costs three D1 calls in
+      // total (config, this lookup, one batch). Quality flags are
+      // computed here, before the insert — flag-only, never read by any
+      // visitor-facing path.
+      const lookup = await env.DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM tr_clicks v WHERE v.ip=?1 AND ?1<>'' AND v.ts >= datetime('now','-1 hour')) AS velocity,
+           (SELECT s.browser_timezone FROM tr_sessions s WHERE s.session_id=?2) AS session_tz,
+           (SELECT 1 FROM tr_clicks u WHERE u.visitor_id=?3 AND u.slug=?4 AND date(u.ts)=?5 LIMIT 1) AS seen`,
+      ).bind(row.ip, row.session_id, row.visitor_id, row.slug, day).first<{ velocity: number; session_tz: string | null; seen: number | null }>();
+      uniqueAdd = row.visitor_id && !lookup?.seen ? 1 : 0;
+      const verdict = flagsForSignals({
+        isBotUa: row.is_bot_ua === 1,
+        connClass: connClassFromOrg(row.as_org),
+        trustScore: row.trust_score,
+        tzMismatch: tzCountryMismatch(lookup?.session_tz || '', row.ip_timezone, row.country),
+        velocityPerHour: (lookup?.velocity || 0) + 1,
+        noReferrerOnSiteClick: Boolean(row.sp_page) && !row.referrer,
+      }, cfg.qualityWeightsJson);
+      row.quality_flags = JSON.stringify(verdict.flags);
+      row.quality_band = verdict.band;
       statements.push(env.DB.prepare(
         `INSERT OR IGNORE INTO tr_clicks(${CLICK_COLUMNS.join(',')}) VALUES(${CLICK_COLUMNS.map(() => '?').join(',')})`,
       ).bind(...CLICK_COLUMNS.map(column => row[column])));
     }
     statements.push(env.DB.prepare(
-      `INSERT INTO tr_click_daily(day,slug,country,device_type,dest_host,currency,clicks) VALUES(?,?,?,?,?,'',1)
-       ON CONFLICT(day,slug,country,device_type,dest_host,currency) DO UPDATE SET clicks=clicks+1`,
-    ).bind(day, row.slug, row.country, row.device_type, row.dest_host));
+      `INSERT INTO tr_click_daily(day,slug,country,device_type,dest_host,currency,clicks,unique_visitors) VALUES(?,?,?,?,?,'',1,?)
+       ON CONFLICT(day,slug,country,device_type,dest_host,currency) DO UPDATE SET clicks=clicks+1, unique_visitors=unique_visitors+excluded.unique_visitors`,
+    ).bind(day, row.slug, row.country, row.device_type, row.dest_host, uniqueAdd));
     await env.DB.batch(statements);
-    // Quality flags (F9): computed after storage, flag-only — the verdict
-    // is written onto the row for the admin and never read by any
-    // visitor-facing path.
-    if (quota.decision === 'store') {
-      try {
-        const verdict = await assessStoredClick(env.DB, input.clickId, cfg.qualityWeightsJson);
-        if (verdict) {
-          await env.DB.prepare('UPDATE tr_clicks SET quality_flags=?, quality_band=? WHERE click_id=?')
-            .bind(JSON.stringify(verdict.flags), verdict.band, input.clickId).run();
-        }
-      } catch { /* flags are best-effort */ }
-    }
   } catch { console.warn('Insight click capture was unavailable.'); }
 }

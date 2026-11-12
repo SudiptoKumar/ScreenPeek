@@ -1,5 +1,5 @@
 export type AdminRole = 'owner' | 'editor' | 'ads' | 'viewer';
-export type AdminModule = 'dashboard' | 'links' | 'ads' | 'content' | 'sync' | 'settings' | 'backup' | 'pages' | 'seo' | 'titles' | 'people' | 'tools' | 'changes';
+export type AdminModule = 'dashboard' | 'links' | 'ads' | 'content' | 'sync' | 'settings' | 'backup' | 'pages' | 'seo' | 'titles' | 'people' | 'tools' | 'changes' | 'tracking';
 export interface AdminIdentity { email: string; role: AdminRole; modules: Record<string, boolean>; }
 export interface AccessEnvironment { DB: D1Database; CF_ACCESS_TEAM_DOMAIN?: string; CF_ACCESS_AUD?: string; }
 export class AdminError extends Error {
@@ -7,10 +7,10 @@ export class AdminError extends Error {
   constructor(message: string, status = 422) { super(message); this.status = status; }
 }
 const scopes: Record<AdminRole, readonly AdminModule[]> = {
-  owner: ['dashboard', 'links', 'ads', 'content', 'sync', 'settings', 'backup', 'pages', 'seo', 'titles', 'people', 'tools', 'changes'],
-  editor: ['dashboard', 'links', 'content', 'pages', 'seo', 'titles', 'people', 'changes'],
-  ads: ['links', 'ads'],
-  viewer: ['dashboard', 'links', 'ads', 'content', 'sync', 'settings', 'pages', 'seo', 'titles', 'people', 'changes'],
+  owner: ['dashboard', 'links', 'ads', 'content', 'sync', 'settings', 'backup', 'pages', 'seo', 'titles', 'people', 'tools', 'changes', 'tracking'],
+  editor: ['dashboard', 'links', 'content', 'pages', 'seo', 'titles', 'people', 'changes', 'tracking'],
+  ads: ['links', 'ads', 'tracking'],
+  viewer: ['dashboard', 'links', 'ads', 'content', 'sync', 'settings', 'pages', 'seo', 'titles', 'people', 'changes', 'tracking'],
 };
 export function permitted(identity: AdminIdentity, module: AdminModule, write = false) {
   return scopes[identity.role].includes(module) && identity.modules[module] !== false && (!write || identity.role !== 'viewer');

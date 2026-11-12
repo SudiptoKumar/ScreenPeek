@@ -73,24 +73,40 @@ export class QuotaEngine {
     this.onDegradedChange = onDegradedChange;
   }
 
+  /** One KV value holds both counters ({s: stored, t: total attempts})
+   * so a decision costs a single get + a single put. A legacy plain
+   * number reads as both counters at that value. */
+  private async readState(now: Date): Promise<{ stored: number; total: number }> {
+    const raw = await this.kv.get(quotaKey(now));
+    if (!raw) return { stored: 0, total: 0 };
+    try {
+      const parsed = JSON.parse(raw) as { s?: number; t?: number };
+      if (typeof parsed?.s === 'number') return { stored: parsed.s, total: typeof parsed.t === 'number' ? parsed.t : parsed.s };
+    } catch { /* fall through to the legacy shape */ }
+    const numeric = Number(raw) || 0;
+    return { stored: numeric, total: numeric };
+  }
+
   async decide(input: { kind: QuotaKind; country: string }, rules: QuotaRules, now = new Date()): Promise<QuotaResult> {
     const tier = classifyTier(input.country, rules.tier1Countries);
     if (input.kind === 'conversion') return { decision: 'store', count: await this.count(now), tier, capped: false };
-    const key = quotaKey(now);
-    const count = Number(await this.kv.get(key)) || 0;
-    const decision = quotaDecision(count, rules, tier, input.kind, now);
-    let next = count;
-    if (decision === 'store') {
-      next = count + 1;
-      await this.kv.put(key, String(next));
-      if (this.degraded) { this.degraded = false; await this.onDegradedChange?.(false); }
-    }
+    const state = await this.readState(now);
+    const decision = quotaDecision(state.stored, rules, tier, input.kind, now);
+    const next = decision === 'store' ? state.stored + 1 : state.stored;
+    try {
+      await this.kv.put(quotaKey(now), JSON.stringify({ s: next, t: state.total + 1 }));
+    } catch { /* a failed counter put never changes the decision */ }
+    if (decision === 'store' && this.degraded) { this.degraded = false; await this.onDegradedChange?.(false); }
     const capped = next >= rules.dailyCap;
     if (capped && !this.degraded) { this.degraded = true; await this.onDegradedChange?.(true); }
     return { decision, count: next, tier, capped };
   }
 
   async count(now = new Date()): Promise<number> {
-    return Number(await this.kv.get(quotaKey(now))) || 0;
+    return (await this.readState(now)).stored;
+  }
+
+  async total(now = new Date()): Promise<number> {
+    return (await this.readState(now)).total;
   }
 }

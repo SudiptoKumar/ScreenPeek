@@ -3,7 +3,7 @@ import type { ManagedLink } from '../../src/lib/links.ts';
 import { requestCountry } from '../../src/lib/geo.ts';
 import { queueClick } from '../../src/lib/counters.ts';
 import type { BackgroundContext } from '../../src/lib/counters.ts';
-import { readTrackingValues } from '../../src/lib/tracking/config.ts';
+import { parseTrackingConfig, readTrackingValues } from '../../src/lib/tracking/config.ts';
 import { captureClick, newClickId } from '../../src/lib/tracking/click.ts';
 import { resolveIdentity } from '../../src/lib/tracking/identity.ts';
 
@@ -27,6 +27,9 @@ export async function handleGo(request: Request, env: RedirectEnvironment, conte
   if (/prefetch|prerender/i.test(`${request.headers.get('Sec-Purpose') || ''} ${request.headers.get('Purpose') || ''}`)) return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } });
   let destination = '/';
   const identityCookies: string[] = [];
+  // Insight switches are read in parallel with the link lookup below, so
+  // the tracking check adds no serial time to the redirect (gate G3.6).
+  const switchesPromise = readTrackingValues(env, ['tracking_enabled', 'tracking_pass_click_id', 'tracking_click_param_name', 'tracking_consent_mode', 'tracking_daily_cap', 'tracking_tier1_countries', 'tracking_fill_pct', 'tracking_fill_after_hour_utc', 'tracking_ip_mode', 'tracking_quality_weights']).catch(() => null);
   try {
     const link = await readLink(env.CONFIG, env.DB, slug);
     const country = requestCountry(request);
@@ -40,17 +43,20 @@ export async function handleGo(request: Request, env: RedirectEnvironment, conte
         // ScreenPeek Insight capture — dark while tracking_enabled != '1',
         // backgrounded so the redirect is never delayed by it.
         try {
-          const switches = link ? await readTrackingValues(env, ['tracking_enabled', 'tracking_pass_click_id', 'tracking_click_param_name', 'tracking_consent_mode']) : null;
+          const switches = await switchesPromise;
           if (link && switches?.tracking_enabled === '1') {
             const clickId = newClickId();
             const pass = switches.tracking_pass_click_id;
             const paramName = switches.tracking_click_param_name;
             const identity = resolveIdentity(request, switches.tracking_consent_mode || 'basic');
             identityCookies.push(...identity.setCookies);
+            const rows: Record<string, string> = {};
+            for (const [key, value] of Object.entries(switches)) if (typeof value === 'string') rows[key] = value;
             context.waitUntil(captureClick(env, {
               request, slug, linkName: link.name, linkType: link.type, destination: resolved,
               routeReason: routeReasonOf(link, country, device, resolved), clickId,
               visitorId: identity.visitorId, sessionId: identity.sessionId,
+              cfg: parseTrackingConfig(rows),
             }));
             if (pass !== '0') {
               const target = new URL(resolved);
