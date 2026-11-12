@@ -1,14 +1,17 @@
 ---
 import type { AdminIdentity } from '../../lib/admin/access';
-import type { TrackingOverview } from '../../lib/admin/tracking-data';
-import { TRACKING_VIEWS, trackingView } from '../../lib/admin/tracking-data';
-interface Props { actor: AdminIdentity; overview: TrackingOverview | null; }
-const { actor, overview } = Astro.props;
-const view = trackingView(Astro.url);
+import type { TrackingAdminData } from '../../lib/admin/tracking-data';
+import { TRACKING_VIEWS } from '../../lib/admin/tracking-data';
+interface Props { actor: AdminIdentity; data: TrackingAdminData | null; }
+const { actor, data } = Astro.props;
+const overview = data?.overview ?? null;
+const view = data?.view ?? 'overview';
+const list = data?.list ?? null;
+const detail = data?.detail ?? null;
+const filters = data?.filters;
 const viewLabels: Record<string, string> = { overview: 'Overview', clicks: 'Clicks', pages: 'Pages', sessions: 'Sessions', conversions: 'Conversions', quality: 'Quality', charts: 'Charts', export: 'Export', settings: 'Settings', tools: 'Tools' };
 const money = (minor: number, currency: string) => `${currency} ${(minor / 100).toFixed(2)}`;
 const quotaPct = overview ? Math.min(100, Math.round((overview.storedRaw / Math.max(1, overview.cfg.dailyCap)) * 100)) : 0;
-const icon = (paths: string) => paths;
 const icons = {
   click: '<path d="m9 9 5 12 1.8-5.2L21 14Z"/><path d="M7.2 2.2 8 5.1"/><path d="m5.1 8-2.9-.8"/><path d="M14 4.1 12 6"/><path d="m6 2-1.9 2"/>',
   chart: '<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M7 15v-4"/><path d="M12 15V7"/><path d="M17 15v-7"/>',
@@ -17,29 +20,104 @@ const icons = {
   dollar: '<line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
   eye: '<path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0"/><circle cx="12" cy="12" r="3"/>',
 };
+const str = (row: Record<string, unknown> | null, key: string) => String(row?.[key] ?? '');
+const num = (row: Record<string, unknown> | null, key: string) => Number(row?.[key] ?? 0);
+const listHref = (page: number) => { const query = new URLSearchParams(Astro.url.searchParams); query.set('page', String(page)); return `${Astro.url.pathname}?${query}`; };
+const charts = data?.charts ?? null;
+const exportCounts = data?.exportCounts ?? null;
+const chartMax = charts ? Math.max(1, ...charts.days.map(day => day.clicks)) : 1;
+const chartPoints = charts ? charts.days.map((day, index) => `${charts.days.length > 1 ? (index / (charts.days.length - 1)) * 100 : 50},${34 - (day.clicks / chartMax) * 30}`).join(' ') : '';
+const shareRows = (rows: Array<{ label: string; clicks: number }>) => { const total = rows.reduce((sum, row) => sum + row.clicks, 0) || 1; return rows.map(row => ({ ...row, pct: Math.round((row.clicks / total) * 100) })); };
+const detailGroups: Array<{ title: string; fields: Array<[string, string, string?]> }> = detail ? [
+  { title: 'Destination & routing', fields: [['Destination', 'destination'], ['Destination host', 'dest_host'], ['Route reason', 'route_reason'], ['Link', 'slug'], ['Link type', 'link_type'], ['Variant', 'variant_id']] },
+  { title: 'Visitor', fields: [['Visitor ID', 'visitor_id'], ['Session ID', 'session_id'], ['Test click', 'is_test']] },
+  { title: 'Location — IP estimate', fields: [['Country', 'country'], ['Region', 'region'], ['City', 'city'], ['Postal code', 'postal_code'], ['Latitude', 'lat'], ['Longitude', 'lon'], ['IP timezone', 'ip_timezone'], ['ASN', 'asn'], ['Network / org', 'as_org'], ['Connection class', 'conn_class']] },
+  { title: 'Device & browser — best effort', fields: [['Browser', 'browser'], ['Browser major', 'browser_major'], ['OS', 'os'], ['OS version', 'os_version'], ['Device type', 'device_type'], ['Device brand', 'device_brand'], ['Device model', 'device_model'], ['Language', 'language'], ['User agent', 'ua_raw']] },
+  { title: 'Referrer & campaign', fields: [['Referrer', 'referrer'], ['Referrer domain', 'referrer_domain'], ['Referrer class', 'referrer_class'], ['Page the click came from', 'sp_page'], ['Page title', 'sp_title'], ['UTM source', 'utm_source'], ['UTM medium', 'utm_medium'], ['UTM campaign', 'utm_campaign'], ['Sub 1', 'sub1'], ['Sub 2', 'sub2'], ['Sub 3', 'sub3']] },
+  { title: 'Network & quality', fields: [['IP (stored per IP mode)', 'ip'], ['Protocol', 'http_protocol'], ['TLS', 'tls_version'], ['Trust score', 'trust_score', 'Shown only when the platform provides one'], ['Quality band', 'quality_band'], ['Quality flags', 'quality_flags'], ['Disguise score', 'disguise_score'], ['Disguise reasons', 'disguise_reasons'], ['Bot UA', 'is_bot_ua']] },
+] : [];
 ---
 <nav class="hub-navigation" aria-label="Tracking views">{TRACKING_VIEWS.map(name => <a href={name === 'overview' ? '/admin/tracking/' : `/admin/tracking/?view=${name}`} aria-current={view === name ? 'page' : undefined}>{viewLabels[name]}</a>)}</nav>
-{!overview && <section class="empty-state"><h2>Tracking data is unavailable</h2><p>The tracking tables could not be read. If this is a fresh install, the Insight migration may not be applied yet — nothing else in the admin is affected.</p></section>}
-{overview && view === 'overview' && <>
+{!data && <section class="empty-state"><h2>Tracking data is unavailable</h2><p>The tracking tables could not be read. If this is a fresh install, the Insight migration may not be applied yet — nothing else in the admin is affected.</p></section>}
+{data && view === 'overview' && overview && <>
   {!overview.cfg.enabled && <section class="empty-state"><h2>Tracking is off</h2><p>ScreenPeek Insight is installed but switched off, so nothing is being collected and the public site behaves exactly as before. Turn it on in the Tracking Settings view when you are ready — data starts flowing with the next click.</p>{actor.role === 'owner' && <a class="button primary" href="/admin/tracking/?view=settings">Open Tracking Settings</a>}</section>}
   {overview.cfg.enabled && overview.cfg.degraded && <p class="notice admin-error" role="alert">Quota storage is degraded: the daily raw-data counter could not be read or written reliably, so collection may pause early today. Totals below still count every click.</p>}
   {overview.cfg.enabled && overview.quotaCapped && <p class="notice" role="status">Today's raw-data cap of {overview.cfg.dailyCap.toLocaleString()} records is full. New raw rows are being skipped for the rest of the UTC day; the totals below keep counting everything.</p>}
   <div class="widget-wall">
-    <section class="widget"><h2><svg class="widget-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" set:html={icon(icons.click)}></svg>Clicks today</h2><p class="admin-big">{overview.clicksToday.toLocaleString()}</p><small>All clicks, counted in full (UTC day {overview.day})</small></section>
-    <section class="widget"><h2><svg class="widget-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" set:html={icon(icons.users)}></svg>Unique visitors</h2><p class="admin-big">{overview.uniqueVisitorsToday.toLocaleString()}</p><small>From stored clicks — the raw sample, not the full total</small></section>
-    <section class="widget"><h2><svg class="widget-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" set:html={icon(icons.chart)}></svg>Conversions today</h2><p class="admin-big">{overview.conversionsToday.toLocaleString()}</p><small>Attributed to the day of the click</small></section>
-    <section class="widget"><h2><svg class="widget-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" set:html={icon(icons.dollar)}></svg>Revenue today</h2>{overview.revenueToday.length ? overview.revenueToday.map(row => <p class="admin-big">{money(row.revenueMinor, row.currency)}</p>) : <p class="admin-big">—</p>}<small>From postbacks received so far</small></section>
-    <section class="widget"><h2><svg class="widget-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" set:html={icon(icons.eye)}></svg>Pageviews today</h2><p class="admin-big">{overview.pageviewsToday.toLocaleString()}</p><small>{overview.sessionsToday.toLocaleString()} sessions started</small></section>
-    <section class="widget"><h2><svg class="widget-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" set:html={icon(icons.gauge)}></svg>Raw data quota</h2><p class="admin-big">{overview.storedRaw.toLocaleString()} / {overview.cfg.dailyCap.toLocaleString()}</p><small>Stored raw {overview.storedRaw.toLocaleString()} of {overview.totalRaw.toLocaleString()} total today</small><span class="format-track"><span class="format-fill" style={`width:${quotaPct}%;background:#38bdf8`}></span></span></section>
+    <section class="widget"><h2><svg class="widget-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" set:html={icons.click}></svg>Clicks today</h2><p class="admin-big">{overview.clicksToday.toLocaleString()}</p><small>All clicks, counted in full (UTC day {overview.day})</small></section>
+    <section class="widget"><h2><svg class="widget-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" set:html={icons.users}></svg>Unique visitors</h2><p class="admin-big">{overview.uniqueVisitorsToday.toLocaleString()}</p><small>From stored clicks — the raw sample, not the full total</small></section>
+    <section class="widget"><h2><svg class="widget-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" set:html={icons.chart}></svg>Conversions today</h2><p class="admin-big">{overview.conversionsToday.toLocaleString()}</p><small>Attributed to the day of the click</small></section>
+    <section class="widget"><h2><svg class="widget-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" set:html={icons.dollar}></svg>Revenue today</h2>{overview.revenueToday.length ? overview.revenueToday.map(row => <p class="admin-big">{money(row.revenueMinor, row.currency)}</p>) : <p class="admin-big">—</p>}<small>From postbacks received so far</small></section>
+    <section class="widget"><h2><svg class="widget-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" set:html={icons.eye}></svg>Pageviews today</h2><p class="admin-big">{overview.pageviewsToday.toLocaleString()}</p><small>{overview.sessionsToday.toLocaleString()} sessions started</small></section>
+    <section class="widget"><h2><svg class="widget-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" set:html={icons.gauge}></svg>Raw data quota</h2><p class="admin-big">{overview.storedRaw.toLocaleString()} / {overview.cfg.dailyCap.toLocaleString()}</p><small>Stored raw {overview.storedRaw.toLocaleString()} of {overview.totalRaw.toLocaleString()} total today</small><span class="format-track"><span class="format-fill" style={`width:${quotaPct}%;background:#38bdf8`}></span></span></section>
   </div>
   <section class="catalogue-section"><h2>Live feed — latest clicks</h2>
     {overview.liveFeed.length ? <div class="admin-table"><table><thead><tr><th>Time (UTC)</th><th>Link</th><th>Country</th><th>Device</th><th>Destination</th><th>Quality</th><th>Disguise</th></tr></thead><tbody>{overview.liveFeed.map(row => <tr><td>{String(row.ts || '').slice(11, 19)}</td><td>{String(row.slug || '')}<small>{String(row.route_reason || '')}</small></td><td>{String(row.country || '—')}</td><td>{String(row.device_type || '')}{row.device_model ? ` · ${String(row.device_model)}` : ''}</td><td>{String(row.dest_host || '')}</td><td>{String(row.quality_band || 'clean')}</td><td>{row.disguise_score === null || row.disguise_score === undefined ? '—' : `${String(row.disguise_score)} / 100`}</td></tr>)}</tbody></table></div>
     : <p class="quiet-empty">No clicks recorded yet{overview.cfg.enabled ? ' today — the feed fills as visitors click tracked links.' : ' — tracking is off, so nothing is being collected.'}</p>}
   </section>
   <div class="status-row">
-    <section class="catalogue-section"><h2>Top links today</h2>{overview.topLinks.length ? <div class="admin-table"><table><thead><tr><th>Link</th><th>Clicks</th><th>Conv.</th><th>Revenue</th></tr></thead><tbody>{overview.topLinks.map(row => <tr><td>{row.slug}</td><td>{row.clicks.toLocaleString()}</td><td>{row.conversions.toLocaleString()}</td><td>{row.revenue ? (row.revenue / 100).toFixed(2) : '—'}</td></tr>)}</tbody></table></div> : <p class="quiet-empty">No link clicks yet today.</p>}</section>
+    <section class="catalogue-section"><h2>Top links today</h2>{overview.topLinks.length ? <div class="admin-table"><table><thead><tr><th>Link</th><th>Clicks</th><th>Conv.</th><th>Revenue</th></tr></thead><tbody>{overview.topLinks.map(row => <tr><td>{row.slug}</td><td>{row.clicks.toLocaleString()}</td><td>{row.conversions.toLocaleString()}</td><td>{row.revenueMinor ? (row.revenueMinor / 100).toFixed(2) : '—'}</td></tr>)}</tbody></table></div> : <p class="quiet-empty">No link clicks yet today.</p>}</section>
     <section class="catalogue-section"><h2>Top countries today</h2>{overview.topCountries.length ? <div class="admin-table"><table><thead><tr><th>Country</th><th>Clicks</th></tr></thead><tbody>{overview.topCountries.map(row => <tr><td>{row.country || 'Unknown'}</td><td>{row.clicks.toLocaleString()}</td></tr>)}</tbody></table></div> : <p class="quiet-empty">No country data yet today.</p>}</section>
     <section class="catalogue-section"><h2>Postbacks — last 24 hours</h2>{overview.postbackResults.length ? <div class="admin-table"><table><thead><tr><th>Result</th><th>Calls</th></tr></thead><tbody>{overview.postbackResults.map(row => <tr><td>{row.result}</td><td>{row.count.toLocaleString()}</td></tr>)}</tbody></table></div> : <p class="quiet-empty">No postbacks received in the last 24 hours. Networks send them after a conversion happens.</p>}</section>
   </div>
 </>}
-{overview && view !== 'overview' && <section class="empty-state"><h2>{viewLabels[view]}</h2><p>This view is part of the Insight build and arrives with its own step — the Overview is live now.</p></section>}
+{data && ['clicks', 'pages', 'sessions', 'conversions', 'quality'].includes(view) && filters && <>
+  <form class="admin-search" method="get"><input type="hidden" name="view" value={view} />
+    <label>From<input type="date" name="from" value={filters.from} required /></label>
+    <label>To<input type="date" name="to" value={filters.to} required /></label>
+    {(view === 'clicks' || view === 'quality' || view === 'conversions') && <label>Link slug<input name="link" value={filters.link} maxlength="120" /></label>}
+    {(view === 'clicks' || view === 'quality' || view === 'sessions') && <label>Country<input name="country" value={filters.country} maxlength="4" /></label>}
+    {(view === 'clicks' || view === 'quality' || view === 'sessions') && <label>Device<input name="device" value={filters.device} maxlength="20" /></label>}
+    {(view === 'clicks' || view === 'quality') && <label>Quality band<input name="band" value={filters.band} maxlength="20" /></label>}
+    {view === 'conversions' && <label>Network<input name="network" value={filters.network} maxlength="40" /></label>}
+    {(view === 'clicks' || view === 'quality') && <label>Search host / click ID<input name="q" value={filters.q} maxlength="120" /></label>}
+    <button type="submit">Search</button><a href={`/admin/tracking/?view=${view}`}>Clear</a>
+  </form>
+  <p>{list ? `${list.total.toLocaleString()} records · page ${list.page} of ${list.pages} · ${filters.from} to ${filters.to}` : ''}</p>
+  {view === 'quality' && data.qualitySummary && data.qualitySummary.length > 0 && <section class="catalogue-section"><h2>Flag counts in range</h2><div class="admin-table"><table><thead><tr><th>Flag</th><th>Clicks</th></tr></thead><tbody>{data.qualitySummary.map(row => <tr><td>{row.flag}</td><td>{row.count.toLocaleString()}</td></tr>)}</tbody></table></div></section>}
+  {list && list.rows.length === 0 && <p class="quiet-empty">Nothing matches in this date range. Raw rows are kept for the retention period in Settings; totals on the Overview count everything, including rows the daily cap skipped.</p>}
+  {list && list.rows.length > 0 && (view === 'clicks' || view === 'quality') && <div class="admin-table"><table><thead><tr><th>Time (UTC)</th><th>Click ID</th><th>Link</th><th>Country</th><th>Device</th><th>Browser</th><th>Destination</th><th>Band</th><th>Disguise</th></tr></thead><tbody>{list.rows.map(row => <tr><td>{str(row, 'ts')}</td><td><a href={`?view=clicks&click=${encodeURIComponent(str(row, 'click_id'))}`}>{str(row, 'click_id').slice(0, 13)}…</a></td><td>{str(row, 'slug')}</td><td>{str(row, 'country') || '—'}</td><td>{str(row, 'device_type')}{str(row, 'device_model') ? ` · ${str(row, 'device_model')}` : ''}</td><td>{str(row, 'browser')}</td><td>{str(row, 'dest_host')}</td><td>{str(row, 'quality_band')}</td><td>{row.disguise_score === null || row.disguise_score === undefined ? '—' : String(row.disguise_score)}</td></tr>)}</tbody></table></div>}
+  {list && list.rows.length > 0 && view === 'pages' && <div class="admin-table"><table><thead><tr><th>Page</th><th>Type</th><th>Pageviews</th><th>Sessions</th><th>CTA clicks</th><th>Avg duration (s)</th><th>Avg scroll %</th></tr></thead><tbody>{list.rows.map(row => <tr><td>{str(row, 'page_url')}</td><td>{str(row, 'page_type')}</td><td>{num(row, 'pageviews').toLocaleString()}</td><td>{num(row, 'unique_sessions').toLocaleString()}</td><td>{num(row, 'cta_clicks').toLocaleString()}</td><td>{num(row, 'avg_duration_s')}</td><td>{num(row, 'avg_max_scroll_pct')}</td></tr>)}</tbody></table></div>}
+  {list && list.rows.length > 0 && view === 'sessions' && <div class="admin-table"><table><thead><tr><th>Started (UTC)</th><th>Visitor</th><th>Country</th><th>Device</th><th>Pages</th><th>Duration (s)</th><th>Max scroll %</th><th>Entry → exit</th></tr></thead><tbody>{list.rows.map(row => <tr><td>{str(row, 'started_at')}</td><td>{str(row, 'visitor_id').slice(0, 8) || '—'}</td><td>{str(row, 'country') || '—'}</td><td>{str(row, 'device_type')}</td><td>{num(row, 'pageviews')}</td><td>{num(row, 'total_duration_s')}</td><td>{num(row, 'max_scroll_pct')}</td><td>{str(row, 'entry_page')}<small>{str(row, 'exit_page')}</small></td></tr>)}</tbody></table></div>}
+  {list && list.rows.length > 0 && view === 'conversions' && <div class="admin-table"><table><thead><tr><th>Received (UTC)</th><th>Network</th><th>Event</th><th>Status</th><th>Payout</th><th>Transaction</th><th>Link</th><th>Country</th></tr></thead><tbody>{list.rows.map(row => <tr><td>{str(row, 'ts_received')}</td><td>{str(row, 'network')}</td><td>{str(row, 'event')}</td><td>{str(row, 'status_mapped')}{str(row, 'status_raw') ? <small>{str(row, 'status_raw')}</small> : ''}</td><td>{money(num(row, 'payout_minor'), str(row, 'currency') || 'USD')}</td><td>{str(row, 'txid')}</td><td>{str(row, 'slug')}</td><td>{str(row, 'country')}</td></tr>)}</tbody></table></div>}
+  {list && list.pages > 1 && <nav class="pagination" aria-label="Tracking list pages">{list.page > 1 && <a href={listHref(list.page - 1)}>Previous</a>}<span>Page {list.page} of {list.pages}</span>{list.page < list.pages && <a href={listHref(list.page + 1)}>Next</a>}</nav>}
+  {detail && <section class="catalogue-section"><h2>Click detail — {str(detail, 'click_id')}</h2><p>Recorded {str(detail, 'ts')} UTC. Location fields are an IP estimate; device fields are best effort from the user agent.</p>{detailGroups.map(group => <><h3>{group.title}</h3><dl class="title-facts">{group.fields.map(([label, key, note]) => <div><dt>{label}</dt><dd>{str(detail, key) === '' ? '—' : str(detail, key)}{note ? <small> {note}</small> : ''}</dd></div>)}</dl></>)}</section>}
+  {Astro.url.searchParams.has('click') && !detail && <p class="notice admin-error" role="alert">That click ID is not in the stored raw data — it may have been skipped by the daily cap or aged out under retention.</p>}
+</>}
+{data && view === 'charts' && filters && <>
+  <form class="admin-search" method="get"><input type="hidden" name="view" value="charts" />
+    <label>From<input type="date" name="from" value={filters.from} required /></label>
+    <label>To<input type="date" name="to" value={filters.to} required /></label>
+    <button type="submit">Search</button><a href="/admin/tracking/?view=charts">Clear</a>
+  </form>
+  {charts && charts.days.length > 0 ? <>
+    <section class="catalogue-section"><h2>Clicks per day</h2>
+      <svg viewBox="0 0 100 38" preserveAspectRatio="none" style="width:100%;height:120px" role="img" aria-label="Clicks per day chart"><polyline points={chartPoints} fill="none" stroke="#38bdf8" stroke-width="1.2" vector-effect="non-scaling-stroke" /></svg>
+      <div class="admin-table"><table><thead><tr><th>Day</th><th>Clicks</th><th>Conversions</th><th>Revenue (minor)</th><th>Pageviews</th></tr></thead><tbody>{charts.days.map(day => <tr><td>{day.day}</td><td>{day.clicks.toLocaleString()}</td><td>{day.conversions.toLocaleString()}</td><td>{day.revenueMinor.toLocaleString()}</td><td>{day.pageviews.toLocaleString()}</td></tr>)}</tbody></table></div>
+      <small>Charts are drawn from the daily aggregates, which count 100% of traffic. Browser, referrer and quality breakdowns below come from stored raw rows only: raw sample {charts.rawStored.toLocaleString()} of {charts.rawTotal.toLocaleString()} clicks in range.</small>
+    </section>
+    <div class="status-row">
+      <section class="catalogue-section"><h2>Countries</h2>{charts.countries.map(row => <p>{row.label} — {row.clicks.toLocaleString()} ({shareRows(charts.countries).find(item => item.label === row.label)?.pct}%)<span class="format-track"><span class="format-fill" style={`width:${shareRows(charts.countries).find(item => item.label === row.label)?.pct}%;background:#38bdf8`}></span></span></p>)}</section>
+      <section class="catalogue-section"><h2>Devices</h2>{charts.devices.map(row => <p>{row.label} — {row.clicks.toLocaleString()} ({shareRows(charts.devices).find(item => item.label === row.label)?.pct}%)<span class="format-track"><span class="format-fill" style={`width:${shareRows(charts.devices).find(item => item.label === row.label)?.pct}%;background:#34d399`}></span></span></p>)}</section>
+      <section class="catalogue-section"><h2>Browsers (raw sample)</h2>{charts.browsers.map(row => <p>{row.label} — {row.clicks.toLocaleString()}<span class="format-track"><span class="format-fill" style={`width:${shareRows(charts.browsers).find(item => item.label === row.label)?.pct}%;background:#f59e0b`}></span></span></p>)}</section>
+      <section class="catalogue-section"><h2>Referrer classes (raw sample)</h2>{charts.referrers.map(row => <p>{row.label} — {row.clicks.toLocaleString()}<span class="format-track"><span class="format-fill" style={`width:${shareRows(charts.referrers).find(item => item.label === row.label)?.pct}%;background:#a78bfa`}></span></span></p>)}</section>
+      <section class="catalogue-section"><h2>Quality bands (raw sample)</h2>{charts.bands.map(row => <p>{row.label} — {row.clicks.toLocaleString()}<span class="format-track"><span class="format-fill" style={`width:${shareRows(charts.bands).find(item => item.label === row.label)?.pct}%;background:#f87171`}></span></span></p>)}</section>
+    </div>
+  </> : <p class="quiet-empty">No aggregate data in this date range yet. Charts appear once clicks are counted.</p>}
+</>}
+{data && view === 'export' && filters && <section class="catalogue-section"><h2>Export centre</h2>
+  <p>Exports are capped at 3,000 rows — the same cap as raw storage per day. The count is shown before you download; anything over the cap must be narrowed with filters first. IP addresses are left out unless the owner asks for them and confirms.</p>
+  {exportCounts && <div class="admin-table"><table><thead><tr><th>Dataset</th><th>Rows in range</th></tr></thead><tbody>{(['clicks', 'conversions', 'sessions', 'postbacks'] as const).map(name => <tr><td>{name}</td><td>{exportCounts[name].toLocaleString()}{exportCounts[name] > 3000 ? ' — over the limit, narrow your filters' : ''}</td></tr>)}</tbody></table></div>}
+  {['owner', 'editor', 'ads'].includes(actor.role) ? <form class="admin-form" method="get" action="/admin/tracking/">
+    <input type="hidden" name="texport" value="1" />
+    <label>From<input type="date" name="from" value={filters.from} required /></label>
+    <label>To<input type="date" name="to" value={filters.to} required /></label>
+    <label>Dataset<select name="dataset"><option value="clicks">clicks</option><option value="conversions">conversions</option><option value="sessions">sessions</option><option value="postbacks">postbacks</option></select></label>
+    <label>Format<select name="format"><option value="csv">CSV</option><option value="json">JSON</option></select></label>
+    <label>Link slug<input name="link" value={filters.link} maxlength="120" /></label>
+    <label>Country<input name="country" value={filters.country} maxlength="4" /></label>
+    {actor.role === 'owner' && <><label>Include IP addresses (owner only)<input type="checkbox" name="include_ip" value="1" /></label><label>I confirm this export may include IP addresses<input type="checkbox" name="confirm_ip" value="1" /></label></>}
+    <button type="submit">Download export</button>
+  </form> : <p class="notice" role="status">Your role can view tracking data but cannot export it — exports need the Ads role or above.</p>}
+</section>}
+{data && ['settings', 'tools'].includes(view) && <section class="empty-state"><h2>{viewLabels[view]}</h2><p>This view is part of the Insight build and arrives with its own step — the Overview, lists, click detail, charts and exports are live now.</p></section>}

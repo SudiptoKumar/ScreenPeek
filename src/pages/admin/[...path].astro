@@ -55,6 +55,25 @@ try {
     const records=await listData(env,actor,name,Astro.url,true);
     return new Response(csvRows(records.rows),{headers:{'Content-Type':'text/csv; charset=utf-8','Content-Disposition':`attachment; filename="screenpeek-${name}.csv"`,'Cache-Control':'private, no-store'}});
   }
+  if (module === 'tracking' && Astro.url.searchParams.get('texport') === '1') {
+    if (!['owner', 'editor', 'ads'].includes(actor.role)) throw new AdminError('Exports need the Ads role or above.', 403);
+    const { buildExport, trackingFilters, EXPORT_DATASETS } = await import('../../lib/admin/tracking-data');
+    const datasetValue = Astro.url.searchParams.get('dataset') || 'clicks';
+    const dataset = (EXPORT_DATASETS as readonly string[]).includes(datasetValue) ? datasetValue as typeof EXPORT_DATASETS[number] : 'clicks';
+    const format = Astro.url.searchParams.get('format') === 'json' ? 'json' : 'csv';
+    const includeIp = dataset === 'clicks' && actor.role === 'owner' && Astro.url.searchParams.get('include_ip') === '1' && Astro.url.searchParams.get('confirm_ip') === '1';
+    const exportFilters = trackingFilters(Astro.url);
+    let built;
+    try { built = await buildExport(env, dataset, exportFilters, format, includeIp); }
+    catch (exportError) { throw new AdminError(exportError instanceof Error ? exportError.message : 'Export failed.'); }
+    try {
+      await env.DB.prepare('INSERT INTO tr_export_jobs(created_by,dataset,filters_json,format,status,row_count,size_bytes) VALUES(?,?,?,?,?,?,?)')
+        .bind(actor.email, dataset, JSON.stringify({ ...exportFilters, ip_included: includeIp }), format, 'done', built.rows, built.body.length).run();
+      await env.DB.prepare("INSERT INTO admin_log(actor,entity,entity_id,after) VALUES(?,'tracking_export',?,?)")
+        .bind(actor.email, dataset, JSON.stringify({ rows: built.rows, format, ip_included: includeIp })).run();
+    } catch { /* The file is generated; logging is best-effort. */ }
+    return new Response(built.body, { headers: { 'Content-Type': built.contentType, 'Content-Disposition': `attachment; filename="${built.filename}"`, 'Cache-Control': 'private, no-store' } });
+  }
   if(module==='backup' && Astro.url.searchParams.has('snapshot')){
     if(actor.role!=='owner'||!env.BACKUPS)throw new AdminError('Owner permission and private backup storage are required.',403);
     const key=Astro.url.searchParams.get('snapshot')||'';if(!/^backups\/\d{4}-[\w.-]+\.json\.gz$/.test(key))throw new AdminError('Choose a valid private snapshot.');
