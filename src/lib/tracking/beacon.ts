@@ -10,6 +10,7 @@ import { readTrackingConfig, type TrackingConfig } from './config.ts';
 import { QuotaEngine } from './quota.ts';
 import { clientInfo, parseUserAgent } from './parse.ts';
 import { consentAllows, resolveIdentity } from './identity.ts';
+import { browserTzMismatch, computeDisguise, languageCountryMismatch } from './disguise.ts';
 
 export const BEACON_BODY_CAP = 4096;
 const EVENT_TYPES = new Set(['pageview', 'scroll', 'cta', 'exit']);
@@ -145,5 +146,25 @@ export async function ingestBeacon(env: { DB: D1Database; CONFIG: KVNamespace },
     }
   }
   await env.DB.batch(statements);
+  // Consistency-score refresh (F16): once browser-side session data
+  // lands, recompute the score for clicks in this session with the
+  // fuller signal set. Best-effort — a failure never affects the beacon.
+  if (sessionId && event.type === 'pageview' && (s.browser_timezone || s.languages || s.webrtc_ip)) {
+    try {
+      const clicks = await env.DB.prepare('SELECT click_id, country, ip, conn_class, trust_score FROM tr_clicks WHERE session_id=?')
+        .bind(sessionId).all<{ click_id: string; country: string; ip: string; conn_class: string; trust_score: number | null }>();
+      for (const click of clicks.results || []) {
+        const verdict = computeDisguise({
+          tzMismatch: browserTzMismatch(s.browser_timezone || '', click.country),
+          languageMismatch: languageCountryMismatch(s.languages || '', click.country),
+          webrtcMismatch: Boolean(s.webrtc_ip) && Boolean(click.ip) && !String(click.ip).startsWith('0.') && s.webrtc_ip !== click.ip,
+          connClass: click.conn_class,
+          trustScore: click.trust_score,
+        }, cfg.disguiseWeightsJson);
+        await env.DB.prepare('UPDATE tr_clicks SET disguise_score=?, disguise_reasons=? WHERE click_id=?')
+          .bind(verdict.score, JSON.stringify(verdict.reasons), click.click_id).run();
+      }
+    } catch { /* refresh is best-effort */ }
+  }
   return { status: 204, setCookies: identity.setCookies };
 }

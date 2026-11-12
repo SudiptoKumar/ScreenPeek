@@ -180,3 +180,76 @@ test('G13 export: counts shown first, CSV excludes IP by default, over-cap refus
     expect(viewerResponse.status).toBe(403);
   } finally { await context.close(); await worker.dispose(); }
 });
+
+test('G14 settings save + validate, tools: UA tester, postback tester, purge, retention dry run', async ({ browser }) => {
+  test.setTimeout(120_000);
+  const fixture = accessFixture();
+  const worker = await testWorker({ ADS_ENABLED: '0', CF_ACCESS_TEAM_DOMAIN: fixture.team, CF_ACCESS_AUD: fixture.aud, TRACKING_PB_SECRET_TESTNET: 'tester-secret' }, 8790, { [fixture.certUrl]: { body: { keys: [fixture.jwk] } } });
+  const context = await browser.newContext({ viewport: { width: 360, height: 800 }, extraHTTPHeaders: fixture.headers('owner@example.test') });
+  const page = await context.newPage();
+  try {
+    await worker.local.db.batch([
+      { sql: "INSERT INTO admin_users(email,role) VALUES('owner@example.test','owner'),('editor@example.test','editor')" },
+      { sql: "UPDATE config SET value='1' WHERE key='tracking_enabled'" },
+      { sql: "INSERT INTO tr_clicks(click_id,ts,slug,is_test) VALUES('old-real-click','2020-01-01 00:00:00','smartlink-main',0)" },
+    ]);
+    // Settings page renders every field with help text.
+    await page.goto(worker.base + '/admin/tracking/?view=settings');
+    await expect(page.getByText('Tracking enabled')).toBeVisible();
+    await expect(page.getByText('Tier-1 countries')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Save tracking settings' })).toBeVisible();
+    // Save a change via POST.
+    const saveResponse = await fetch(worker.base + '/admin/tracking/?view=settings', {
+      method: 'POST', redirect: 'manual',
+      headers: { ...fixture.headers('owner@example.test'), 'Content-Type': 'application/x-www-form-urlencoded', Origin: worker.base },
+      body: new URLSearchParams({ action: 'tracking_settings', tracking_daily_cap: '2500', tracking_tier1_countries: 'US, GB', tracking_enabled: '1', tracking_consent_mode: 'basic', tracking_ip_mode: 'masked' }),
+    });
+    expect(saveResponse.status).toBe(303);
+    const cap = await worker.local.db.query("SELECT value FROM config WHERE key='tracking_daily_cap'");
+    expect(cap).toEqual([{ value: '2500' }]);
+    const tier1 = await worker.local.db.query("SELECT value FROM config WHERE key='tracking_tier1_countries'");
+    expect(tier1).toEqual([{ value: 'US,GB' }]);
+    // Invalid value is refused with a plain error.
+    const badResponse = await fetch(worker.base + '/admin/tracking/?view=settings', {
+      method: 'POST',
+      headers: { ...fixture.headers('owner@example.test'), 'Content-Type': 'application/x-www-form-urlencoded', Origin: worker.base },
+      body: new URLSearchParams({ action: 'tracking_settings', tracking_daily_cap: '5' }),
+    });
+    expect(await badResponse.text()).toContain('between 100 and 100000');
+    // Editor cannot save tracking settings (owner-only).
+    const editorResponse = await fetch(worker.base + '/admin/tracking/?view=settings', {
+      method: 'POST',
+      headers: { ...fixture.headers('editor@example.test'), 'Content-Type': 'application/x-www-form-urlencoded', Origin: worker.base },
+      body: new URLSearchParams({ action: 'tracking_settings', tracking_daily_cap: '2000' }),
+    });
+    expect(await editorResponse.text()).toContain('owner-only');
+    // UA tester parses a pasted agent.
+    await page.goto(worker.base + '/admin/tracking/?view=tools&ua=' + encodeURIComponent('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'));
+    await expect(page.getByText(/Safari 17 · OS iOS/)).toBeVisible();
+    // Postback tester records a test conversion; purge removes test rows only.
+    const testResponse = await fetch(worker.base + '/admin/tracking/?view=tools', {
+      method: 'POST', redirect: 'manual',
+      headers: { ...fixture.headers('owner@example.test'), 'Content-Type': 'application/x-www-form-urlencoded', Origin: worker.base },
+      body: new URLSearchParams({ action: 'tracking_postback_test', network: 'testnet', event: 'purchase', payout: '2.50', status: 'approved' }),
+    });
+    expect(testResponse.status).toBe(303);
+    const conversions = await worker.local.db.query('SELECT click_id, is_test, payout_minor FROM tr_conversions');
+    expect(conversions).toEqual([{ click_id: 'test-click-tester', is_test: 1, payout_minor: 250 }]);
+    const purgeResponse = await fetch(worker.base + '/admin/tracking/?view=tools', {
+      method: 'POST', redirect: 'manual',
+      headers: { ...fixture.headers('owner@example.test'), 'Content-Type': 'application/x-www-form-urlencoded', Origin: worker.base },
+      body: new URLSearchParams({ action: 'tracking_purge_test' }),
+    });
+    expect(purgeResponse.status).toBe(303);
+    expect(await worker.local.db.query('SELECT COUNT(*) AS count FROM tr_conversions')).toEqual([{ count: 0 }]);
+    expect(await worker.local.db.query('SELECT COUNT(*) AS count FROM tr_clicks')).toEqual([{ count: 1 }]);
+    // Retention dry run counts the ancient real click, deletes nothing.
+    const retentionResponse = await fetch(worker.base + '/admin/tracking/?view=tools', {
+      method: 'POST', redirect: 'manual',
+      headers: { ...fixture.headers('owner@example.test'), 'Content-Type': 'application/x-www-form-urlencoded', Origin: worker.base },
+      body: new URLSearchParams({ action: 'tracking_retention', dry_run: '1' }),
+    });
+    expect(retentionResponse.status).toBe(303);
+    expect(await worker.local.db.query('SELECT COUNT(*) AS count FROM tr_clicks')).toEqual([{ count: 1 }]);
+  } finally { await context.close(); await worker.dispose(); }
+});

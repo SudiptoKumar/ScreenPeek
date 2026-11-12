@@ -88,6 +88,10 @@ export async function applyAdminAction(env: AdminEnvironment, identity: AdminIde
     if (action === 'purge-cache') return { message: await purgeCache(env, identity, text(form, 'url', 2048), fetcher), jobUrl: undefined };
     throw new AdminError('Unknown tools action.');
   }
+  if (module === 'tracking') {
+    const { trackingAction } = await import('./tracking-actions.ts');
+    return { message: await trackingAction(env as unknown as Parameters<typeof trackingAction>[0], identity, form), jobUrl: undefined };
+  }
   let sql = '', params: Array<string | number | null> = [], entity = '', id = '', before: unknown = null, after: unknown = null, mirrors: MirrorRef[] = [];
   const related: Array<{ sql: string; params: Array<string | number | null> }> = [];
   if (module === 'links') {

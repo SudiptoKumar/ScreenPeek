@@ -2,6 +2,8 @@
 import type { AdminIdentity } from '../../lib/admin/access';
 import type { TrackingAdminData } from '../../lib/admin/tracking-data';
 import { TRACKING_VIEWS } from '../../lib/admin/tracking-data';
+import { TRACKING_FIELDS } from '../../lib/tracking/fields';
+import { parseUserAgent, clientInfo } from '../../lib/tracking/parse';
 interface Props { actor: AdminIdentity; data: TrackingAdminData | null; }
 const { actor, data } = Astro.props;
 const overview = data?.overview ?? null;
@@ -25,6 +27,11 @@ const num = (row: Record<string, unknown> | null, key: string) => Number(row?.[k
 const listHref = (page: number) => { const query = new URLSearchParams(Astro.url.searchParams); query.set('page', String(page)); return `${Astro.url.pathname}?${query}`; };
 const charts = data?.charts ?? null;
 const exportCounts = data?.exportCounts ?? null;
+const settingsValues = data?.settings ?? {};
+const uaParam = Astro.url.searchParams.get('ua') || '';
+const uaResult = uaParam ? parseUserAgent(uaParam) : null;
+const myInfo = clientInfo(Astro.request);
+const myUa = parseUserAgent(Astro.request.headers.get('User-Agent') || '');
 const chartMax = charts ? Math.max(1, ...charts.days.map(day => day.clicks)) : 1;
 const chartPoints = charts ? charts.days.map((day, index) => `${charts.days.length > 1 ? (index / (charts.days.length - 1)) * 100 : 50},${34 - (day.clicks / chartMax) * 30}`).join(' ') : '';
 const shareRows = (rows: Array<{ label: string; clicks: number }>) => { const total = rows.reduce((sum, row) => sum + row.clicks, 0) || 1; return rows.map(row => ({ ...row, pct: Math.round((row.clicks / total) * 100) })); };
@@ -34,7 +41,7 @@ const detailGroups: Array<{ title: string; fields: Array<[string, string, string
   { title: 'Location — IP estimate', fields: [['Country', 'country'], ['Region', 'region'], ['City', 'city'], ['Postal code', 'postal_code'], ['Latitude', 'lat'], ['Longitude', 'lon'], ['IP timezone', 'ip_timezone'], ['ASN', 'asn'], ['Network / org', 'as_org'], ['Connection class', 'conn_class']] },
   { title: 'Device & browser — best effort', fields: [['Browser', 'browser'], ['Browser major', 'browser_major'], ['OS', 'os'], ['OS version', 'os_version'], ['Device type', 'device_type'], ['Device brand', 'device_brand'], ['Device model', 'device_model'], ['Language', 'language'], ['User agent', 'ua_raw']] },
   { title: 'Referrer & campaign', fields: [['Referrer', 'referrer'], ['Referrer domain', 'referrer_domain'], ['Referrer class', 'referrer_class'], ['Page the click came from', 'sp_page'], ['Page title', 'sp_title'], ['UTM source', 'utm_source'], ['UTM medium', 'utm_medium'], ['UTM campaign', 'utm_campaign'], ['Sub 1', 'sub1'], ['Sub 2', 'sub2'], ['Sub 3', 'sub3']] },
-  { title: 'Network & quality', fields: [['IP (stored per IP mode)', 'ip'], ['Protocol', 'http_protocol'], ['TLS', 'tls_version'], ['Trust score', 'trust_score', 'Shown only when the platform provides one'], ['Quality band', 'quality_band'], ['Quality flags', 'quality_flags'], ['Disguise score', 'disguise_score'], ['Disguise reasons', 'disguise_reasons'], ['Bot UA', 'is_bot_ua']] },
+  { title: 'Network & quality', fields: [['IP (stored per IP mode)', 'ip'], ['Protocol', 'http_protocol'], ['TLS', 'tls_version'], ['Trust score', 'trust_score', 'Shown only when the platform provides one'], ['Quality band', 'quality_band'], ['Quality flags', 'quality_flags'], ['Consistency score', 'disguise_score'], ['Consistency reasons', 'disguise_reasons'], ['Bot UA', 'is_bot_ua']] },
 ] : [];
 ---
 <nav class="hub-navigation" aria-label="Tracking views">{TRACKING_VIEWS.map(name => <a href={name === 'overview' ? '/admin/tracking/' : `/admin/tracking/?view=${name}`} aria-current={view === name ? 'page' : undefined}>{viewLabels[name]}</a>)}</nav>
@@ -52,7 +59,7 @@ const detailGroups: Array<{ title: string; fields: Array<[string, string, string
     <section class="widget"><h2><svg class="widget-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" set:html={icons.gauge}></svg>Raw data quota</h2><p class="admin-big">{overview.storedRaw.toLocaleString()} / {overview.cfg.dailyCap.toLocaleString()}</p><small>Stored raw {overview.storedRaw.toLocaleString()} of {overview.totalRaw.toLocaleString()} total today</small><span class="format-track"><span class="format-fill" style={`width:${quotaPct}%;background:#38bdf8`}></span></span></section>
   </div>
   <section class="catalogue-section"><h2>Live feed — latest clicks</h2>
-    {overview.liveFeed.length ? <div class="admin-table"><table><thead><tr><th>Time (UTC)</th><th>Link</th><th>Country</th><th>Device</th><th>Destination</th><th>Quality</th><th>Disguise</th></tr></thead><tbody>{overview.liveFeed.map(row => <tr><td>{String(row.ts || '').slice(11, 19)}</td><td>{String(row.slug || '')}<small>{String(row.route_reason || '')}</small></td><td>{String(row.country || '—')}</td><td>{String(row.device_type || '')}{row.device_model ? ` · ${String(row.device_model)}` : ''}</td><td>{String(row.dest_host || '')}</td><td>{String(row.quality_band || 'clean')}</td><td>{row.disguise_score === null || row.disguise_score === undefined ? '—' : `${String(row.disguise_score)} / 100`}</td></tr>)}</tbody></table></div>
+    {overview.liveFeed.length ? <div class="admin-table"><table><thead><tr><th>Time (UTC)</th><th>Link</th><th>Country</th><th>Device</th><th>Destination</th><th>Quality</th><th>Consistency</th></tr></thead><tbody>{overview.liveFeed.map(row => <tr><td>{String(row.ts || '').slice(11, 19)}</td><td>{String(row.slug || '')}<small>{String(row.route_reason || '')}</small></td><td>{String(row.country || '—')}</td><td>{String(row.device_type || '')}{row.device_model ? ` · ${String(row.device_model)}` : ''}</td><td>{String(row.dest_host || '')}</td><td>{String(row.quality_band || 'clean')}</td><td>{row.disguise_score === null || row.disguise_score === undefined ? '—' : `${String(row.disguise_score)} / 100`}</td></tr>)}</tbody></table></div>
     : <p class="quiet-empty">No clicks recorded yet{overview.cfg.enabled ? ' today — the feed fills as visitors click tracked links.' : ' — tracking is off, so nothing is being collected.'}</p>}
   </section>
   <div class="status-row">
@@ -76,7 +83,7 @@ const detailGroups: Array<{ title: string; fields: Array<[string, string, string
   <p>{list ? `${list.total.toLocaleString()} records · page ${list.page} of ${list.pages} · ${filters.from} to ${filters.to}` : ''}</p>
   {view === 'quality' && data.qualitySummary && data.qualitySummary.length > 0 && <section class="catalogue-section"><h2>Flag counts in range</h2><div class="admin-table"><table><thead><tr><th>Flag</th><th>Clicks</th></tr></thead><tbody>{data.qualitySummary.map(row => <tr><td>{row.flag}</td><td>{row.count.toLocaleString()}</td></tr>)}</tbody></table></div></section>}
   {list && list.rows.length === 0 && <p class="quiet-empty">Nothing matches in this date range. Raw rows are kept for the retention period in Settings; totals on the Overview count everything, including rows the daily cap skipped.</p>}
-  {list && list.rows.length > 0 && (view === 'clicks' || view === 'quality') && <div class="admin-table"><table><thead><tr><th>Time (UTC)</th><th>Click ID</th><th>Link</th><th>Country</th><th>Device</th><th>Browser</th><th>Destination</th><th>Band</th><th>Disguise</th></tr></thead><tbody>{list.rows.map(row => <tr><td>{str(row, 'ts')}</td><td><a href={`?view=clicks&click=${encodeURIComponent(str(row, 'click_id'))}`}>{str(row, 'click_id').slice(0, 13)}…</a></td><td>{str(row, 'slug')}</td><td>{str(row, 'country') || '—'}</td><td>{str(row, 'device_type')}{str(row, 'device_model') ? ` · ${str(row, 'device_model')}` : ''}</td><td>{str(row, 'browser')}</td><td>{str(row, 'dest_host')}</td><td>{str(row, 'quality_band')}</td><td>{row.disguise_score === null || row.disguise_score === undefined ? '—' : String(row.disguise_score)}</td></tr>)}</tbody></table></div>}
+  {list && list.rows.length > 0 && (view === 'clicks' || view === 'quality') && <div class="admin-table"><table><thead><tr><th>Time (UTC)</th><th>Click ID</th><th>Link</th><th>Country</th><th>Device</th><th>Browser</th><th>Destination</th><th>Band</th><th>Consistency</th></tr></thead><tbody>{list.rows.map(row => <tr><td>{str(row, 'ts')}</td><td><a href={`?view=clicks&click=${encodeURIComponent(str(row, 'click_id'))}`}>{str(row, 'click_id').slice(0, 13)}…</a></td><td>{str(row, 'slug')}</td><td>{str(row, 'country') || '—'}</td><td>{str(row, 'device_type')}{str(row, 'device_model') ? ` · ${str(row, 'device_model')}` : ''}</td><td>{str(row, 'browser')}</td><td>{str(row, 'dest_host')}</td><td>{str(row, 'quality_band')}</td><td>{row.disguise_score === null || row.disguise_score === undefined ? '—' : String(row.disguise_score)}</td></tr>)}</tbody></table></div>}
   {list && list.rows.length > 0 && view === 'pages' && <div class="admin-table"><table><thead><tr><th>Page</th><th>Type</th><th>Pageviews</th><th>Sessions</th><th>CTA clicks</th><th>Avg duration (s)</th><th>Avg scroll %</th></tr></thead><tbody>{list.rows.map(row => <tr><td>{str(row, 'page_url')}</td><td>{str(row, 'page_type')}</td><td>{num(row, 'pageviews').toLocaleString()}</td><td>{num(row, 'unique_sessions').toLocaleString()}</td><td>{num(row, 'cta_clicks').toLocaleString()}</td><td>{num(row, 'avg_duration_s')}</td><td>{num(row, 'avg_max_scroll_pct')}</td></tr>)}</tbody></table></div>}
   {list && list.rows.length > 0 && view === 'sessions' && <div class="admin-table"><table><thead><tr><th>Started (UTC)</th><th>Visitor</th><th>Country</th><th>Device</th><th>Pages</th><th>Duration (s)</th><th>Max scroll %</th><th>Entry → exit</th></tr></thead><tbody>{list.rows.map(row => <tr><td>{str(row, 'started_at')}</td><td>{str(row, 'visitor_id').slice(0, 8) || '—'}</td><td>{str(row, 'country') || '—'}</td><td>{str(row, 'device_type')}</td><td>{num(row, 'pageviews')}</td><td>{num(row, 'total_duration_s')}</td><td>{num(row, 'max_scroll_pct')}</td><td>{str(row, 'entry_page')}<small>{str(row, 'exit_page')}</small></td></tr>)}</tbody></table></div>}
   {list && list.rows.length > 0 && view === 'conversions' && <div class="admin-table"><table><thead><tr><th>Received (UTC)</th><th>Network</th><th>Event</th><th>Status</th><th>Payout</th><th>Transaction</th><th>Link</th><th>Country</th></tr></thead><tbody>{list.rows.map(row => <tr><td>{str(row, 'ts_received')}</td><td>{str(row, 'network')}</td><td>{str(row, 'event')}</td><td>{str(row, 'status_mapped')}{str(row, 'status_raw') ? <small>{str(row, 'status_raw')}</small> : ''}</td><td>{money(num(row, 'payout_minor'), str(row, 'currency') || 'USD')}</td><td>{str(row, 'txid')}</td><td>{str(row, 'slug')}</td><td>{str(row, 'country')}</td></tr>)}</tbody></table></div>}
@@ -120,4 +127,51 @@ const detailGroups: Array<{ title: string; fields: Array<[string, string, string
     <button type="submit">Download export</button>
   </form> : <p class="notice" role="status">Your role can view tracking data but cannot export it — exports need the Ads role or above.</p>}
 </section>}
-{data && ['settings', 'tools'].includes(view) && <section class="empty-state"><h2>{viewLabels[view]}</h2><p>This view is part of the Insight build and arrives with its own step — the Overview, lists, click detail, charts and exports are live now.</p></section>}
+{data && view === 'settings' && <section class="catalogue-section"><h2>Tracking settings</h2>
+  {actor.role !== 'owner' ? <p class="notice" role="status">Settings are owner-only — your role can view the values but not change them.</p> : <>
+  <p>One field per row, in the order the system reads them. Keys with a red star change what is collected or where money is attributed — check the help text before saving.</p>
+  <form class="admin-form" method="post" action="/admin/tracking/?view=settings">
+    <input type="hidden" name="action" value="tracking_settings" />
+    {TRACKING_FIELDS.map(field => <label>{field.label}{field.star ? <span aria-hidden="true" style="color:#dc2626"> *</span> : ''}
+      {field.kind === 'toggle' ? <select name={field.key}><option value="0" selected={settingsValues[field.key] !== '1'}>Off (0)</option><option value="1" selected={settingsValues[field.key] === '1'}>On (1)</option></select>
+      : field.kind === 'select' ? <select name={field.key}>{field.options?.map(option => <option value={option} selected={settingsValues[field.key] === option}>{option}</option>)}</select>
+      : field.kind === 'json' ? <textarea name={field.key} rows="3" maxlength="20000">{settingsValues[field.key] ?? ''}</textarea>
+      : field.kind === 'number' ? <input type="number" name={field.key} value={settingsValues[field.key] ?? ''} min={field.min} max={field.max} />
+      : <input type="text" name={field.key} value={settingsValues[field.key] ?? ''} maxlength="2000" />}
+      <small>{field.help}</small>
+    </label>)}
+    <button type="submit">Save tracking settings</button>
+  </form></>}
+</section>}
+{data && view === 'tools' && <section class="catalogue-section"><h2>Tracking tools</h2>
+  <h3>User-agent tester</h3>
+  <form class="admin-search" method="get"><input type="hidden" name="view" value="tools" /><label>User agent<input name="ua" value={uaParam} maxlength="600" /></label><button type="submit">Search</button></form>
+  {uaResult && <p>Browser {uaResult.browser} {uaResult.browserMajor} · OS {uaResult.os} {uaResult.osVersion} · {uaResult.deviceType}{uaResult.deviceBrand ? ` · ${uaResult.deviceBrand}` : ''}{uaResult.deviceModel ? ` · ${uaResult.deviceModel}` : ''} · bot UA: {uaResult.isBotUa ? 'yes' : 'no'}</p>}
+  <h3>What do you see about me?</h3>
+  <p>This is exactly what a click from this browser and connection would record right now: country {myInfo.country || '—'}, region {myInfo.region || '—'}, city {myInfo.city || '—'}, timezone {myInfo.ipTimezone || '—'}, network {myInfo.asOrg || '—'} (ASN {myInfo.asn ?? '—'}), {myUa.browser} on {myUa.os}, {myUa.deviceType}. Location comes from the connection, not GPS.</p>
+  {actor.role === 'owner' && <>
+  <h3>Postback tester</h3>
+  <p>Fires a real postback at a built-in test click, so you can prove a network's setup end to end. The conversion is marked as test data.</p>
+  <form class="admin-form" method="post" action="/admin/tracking/?view=tools">
+    <input type="hidden" name="action" value="tracking_postback_test" />
+    <label>Network<input name="network" maxlength="40" required /></label>
+    <label>Event<input name="event" value="purchase" maxlength="60" /></label>
+    <label>Payout<input name="payout" value="1.00" maxlength="30" /></label>
+    <label>Status<input name="status" value="approved" maxlength="40" /></label>
+    <button type="submit">Send test postback</button>
+  </form>
+  <h3>Purge test data</h3>
+  <p>Deletes every row marked as test data (test clicks, their conversions, events and sessions). Real visitor data is untouched.</p>
+  <form class="admin-form" method="post" action="/admin/tracking/?view=tools" onsubmit="return confirm('Delete all Insight test data?')">
+    <input type="hidden" name="action" value="tracking_purge_test" />
+    <button type="submit">Purge test data</button>
+  </form>
+  <h3>Retention</h3>
+  <p>Raw rows older than the retention settings are deleted; daily aggregates are kept forever. Run a dry run first to see the counts.</p>
+  <form class="admin-form" method="post" action="/admin/tracking/?view=tools">
+    <input type="hidden" name="action" value="tracking_retention" />
+    <label>Dry run — count only, delete nothing<input type="checkbox" name="dry_run" value="1" checked /></label>
+    <button type="submit">Run retention</button>
+  </form></>}
+  {actor.role !== 'owner' && <p class="notice" role="status">The postback tester, test-data purge and retention run are owner-only.</p>}
+</section>}

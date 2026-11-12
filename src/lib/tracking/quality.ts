@@ -73,6 +73,9 @@ const TZ_COUNTRY: Record<string, string> = {
   'Asia/Singapore': 'SG', 'Asia/Dubai': 'AE', 'Europe/Berlin': 'DE', 'Europe/Paris': 'FR',
 };
 
+/** The country a timezone belongs to, or '' when the map has no opinion. */
+export const tzToCountry = (timezone: string): string => TZ_COUNTRY[timezone] || '';
+
 export function tzCountryMismatch(browserTimezone: string, ipTimezone: string, country: string): boolean {
   const tz = browserTimezone || ipTimezone;
   if (!tz || !country) return false;
@@ -80,25 +83,21 @@ export function tzCountryMismatch(browserTimezone: string, ipTimezone: string, c
   return Boolean(expected && expected !== country.toUpperCase());
 }
 
-/** Gather a stored click's signals and return its verdict. */
+/** Gather a stored click's signals and return its verdict. One query:
+ * the session timezone and the velocity count ride as scalar subqueries
+ * so per-click assessment stays at two D1 round trips (row + update). */
 export async function assessStoredClick(
   db: D1Database, clickId: string, weightsRaw: string,
 ): Promise<QualityVerdict | null> {
-  const click = await db.prepare('SELECT * FROM tr_clicks WHERE click_id=?').bind(clickId).first<Record<string, unknown>>();
+  const click = await db.prepare(
+    `SELECT c.*,
+       (SELECT s.browser_timezone FROM tr_sessions s WHERE s.session_id=c.session_id) AS session_tz,
+       (SELECT COUNT(*) FROM tr_clicks v WHERE v.ip=c.ip AND c.ip<>'' AND v.ts >= datetime('now','-1 hour')) AS velocity
+     FROM tr_clicks c WHERE c.click_id=?`,
+  ).bind(clickId).first<Record<string, unknown>>();
   if (!click) return null;
-  let browserTimezone = '';
-  if (click.session_id) {
-    const session = await db.prepare('SELECT browser_timezone FROM tr_sessions WHERE session_id=?')
-      .bind(String(click.session_id)).first<{ browser_timezone: string }>();
-    browserTimezone = session?.browser_timezone || '';
-  }
-  let velocity = 0;
-  if (click.ip) {
-    const row = await db.prepare(
-      "SELECT COUNT(*) AS count FROM tr_clicks WHERE ip=? AND ts >= datetime('now','-1 hour')",
-    ).bind(String(click.ip)).first<{ count: number }>();
-    velocity = row?.count ?? 0;
-  }
+  const browserTimezone = String(click.session_tz || '');
+  const velocity = Number(click.velocity || 0);
   return flagsForSignals({
     isBotUa: Number(click.is_bot_ua || 0) === 1,
     connClass: connClassFromOrg(String(click.as_org || '')),

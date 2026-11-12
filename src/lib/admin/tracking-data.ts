@@ -155,6 +155,7 @@ export interface TrackingAdminData {
   qualitySummary: Array<{ flag: string; count: number }> | null;
   charts: TrackingCharts | null;
   exportCounts: Record<ExportDataset, number> | null;
+  settings: Record<string, string> | null;
 }
 
 export async function trackingAdminData(env: { DB: D1Database; CONFIG: KVNamespace }, url: URL): Promise<TrackingAdminData> {
@@ -167,6 +168,12 @@ export async function trackingAdminData(env: { DB: D1Database; CONFIG: KVNamespa
   let qualitySummary: TrackingAdminData['qualitySummary'] = null;
   let charts: TrackingCharts | null = null;
   if (view === 'charts') charts = await trackingCharts(env, filters).catch(() => null);
+  let settings: Record<string, string> | null = null;
+  if (view === 'settings') {
+    const rows = await env.DB.prepare("SELECT key, value FROM config WHERE key LIKE 'tracking_%'").all<{ key: string; value: string }>().catch(() => null);
+    settings = {};
+    for (const row of rows?.results || []) settings[row.key] = row.value;
+  }
   let exportCounts: TrackingAdminData['exportCounts'] = null;
   if (view === 'export') {
     exportCounts = { clicks: 0, conversions: 0, sessions: 0, postbacks: 0 };
@@ -191,7 +198,7 @@ export async function trackingAdminData(env: { DB: D1Database; CONFIG: KVNamespa
   if (clickId) {
     detail = await env.DB.prepare('SELECT * FROM tr_clicks WHERE click_id=?').bind(clickId).first<Record<string, unknown>>();
   }
-  return { overview, view, filters, list, detail, qualitySummary, charts, exportCounts };
+  return { overview, view, filters, list, detail, qualitySummary, charts, exportCounts, settings };
 }
 
 // ---- F12: charts (aggregates only; breakdowns labelled as raw sample) ----

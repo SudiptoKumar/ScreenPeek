@@ -9,6 +9,7 @@
 import { readTrackingConfig, type TrackingConfig } from './config.ts';
 import { QuotaEngine } from './quota.ts';
 import { connClassFromOrg, flagsForSignals, tzCountryMismatch } from './quality.ts';
+import { browserTzMismatch, computeDisguise, languageCountryMismatch, uaChIncoherent } from './disguise.ts';
 import { clientInfo, classifyReferrer, maskIp, parseUserAgent } from './parse.ts';
 
 export const newClickId = () => crypto.randomUUID();
@@ -134,9 +135,10 @@ export async function captureClick(env: { DB: D1Database; CONFIG: KVNamespace },
            (SELECT 1 FROM tr_clicks u WHERE u.visitor_id=?3 AND u.slug=?4 AND date(u.ts)=?5 LIMIT 1) AS seen`,
       ).bind(row.ip, row.session_id, row.visitor_id, row.slug, day).first<{ velocity: number; session_tz: string | null; seen: number | null }>();
       uniqueAdd = row.visitor_id && !lookup?.seen ? 1 : 0;
+      row.conn_class = connClassFromOrg(row.as_org);
       const verdict = flagsForSignals({
         isBotUa: row.is_bot_ua === 1,
-        connClass: connClassFromOrg(row.as_org),
+        connClass: row.conn_class,
         trustScore: row.trust_score,
         tzMismatch: tzCountryMismatch(lookup?.session_tz || '', row.ip_timezone, row.country),
         velocityPerHour: (lookup?.velocity || 0) + 1,
@@ -144,6 +146,17 @@ export async function captureClick(env: { DB: D1Database; CONFIG: KVNamespace },
       }, cfg.qualityWeightsJson);
       row.quality_flags = JSON.stringify(verdict.flags);
       row.quality_band = verdict.band;
+      // Consistency score (F16): click-time signals now; the beacon
+      // refresh adds browser-side signals when the session lands.
+      const disguise = computeDisguise({
+        tzMismatch: browserTzMismatch(lookup?.session_tz || '', row.country),
+        languageMismatch: languageCountryMismatch(row.language, row.country),
+        connClass: row.conn_class,
+        trustScore: row.trust_score,
+        uaChIncoherent: uaChIncoherent(input.request.headers.get('Sec-CH-UA-Platform') || '', row.os),
+      }, cfg.disguiseWeightsJson);
+      row.disguise_score = disguise.score;
+      row.disguise_reasons = JSON.stringify(disguise.reasons);
       statements.push(env.DB.prepare(
         `INSERT OR IGNORE INTO tr_clicks(${CLICK_COLUMNS.join(',')}) VALUES(${CLICK_COLUMNS.map(() => '?').join(',')})`,
       ).bind(...CLICK_COLUMNS.map(column => row[column])));
