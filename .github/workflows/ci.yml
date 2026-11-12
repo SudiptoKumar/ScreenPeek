@@ -61,6 +61,8 @@ jobs:
         run: npm run test:votes
       - name: Ad resolution and preview safety tests
         run: npm run test:ads
+      - name: Insight tracking unit tests
+        run: npm run test:tracking
       - name: Access, admin permissions and audited transaction tests
         run: npm run test:admin
       - name: Trust content and Markdown safety tests
