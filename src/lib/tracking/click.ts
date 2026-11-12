@@ -8,6 +8,7 @@
 
 import { readTrackingConfig, type TrackingConfig } from './config.ts';
 import { QuotaEngine } from './quota.ts';
+import { assessStoredClick } from './quality.ts';
 import { clientInfo, classifyReferrer, maskIp, parseUserAgent } from './parse.ts';
 
 export const newClickId = () => crypto.randomUUID();
@@ -127,5 +128,17 @@ export async function captureClick(env: { DB: D1Database; CONFIG: KVNamespace },
        ON CONFLICT(day,slug,country,device_type,dest_host,currency) DO UPDATE SET clicks=clicks+1`,
     ).bind(day, row.slug, row.country, row.device_type, row.dest_host));
     await env.DB.batch(statements);
+    // Quality flags (F9): computed after storage, flag-only — the verdict
+    // is written onto the row for the admin and never read by any
+    // visitor-facing path.
+    if (quota.decision === 'store') {
+      try {
+        const verdict = await assessStoredClick(env.DB, input.clickId, cfg.qualityWeightsJson);
+        if (verdict) {
+          await env.DB.prepare('UPDATE tr_clicks SET quality_flags=?, quality_band=? WHERE click_id=?')
+            .bind(JSON.stringify(verdict.flags), verdict.band, input.clickId).run();
+        }
+      } catch { /* flags are best-effort */ }
+    }
   } catch { console.warn('Insight click capture was unavailable.'); }
 }

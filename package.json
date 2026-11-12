@@ -43,7 +43,7 @@
     "backup:run": "node scripts/tool.mjs node --use-env-proxy scripts/backup.ts",
     "backup:local": "npm run backup:run -- --local",
     "test:backup": "node --test tests/backup.test.ts",
-    "test:tracking": "node scripts/tool.mjs node --test tests/tracking-schema.test.ts tests/tracking-quota.test.ts tests/tracking-parse.test.ts tests/tracking-identity.test.ts tests/tracking-beacon.test.ts"
+    "test:tracking": "node scripts/tool.mjs node --test tests/tracking-schema.test.ts tests/tracking-quota.test.ts tests/tracking-parse.test.ts tests/tracking-identity.test.ts tests/tracking-beacon.test.ts tests/tracking-postback.test.ts tests/tracking-quality.test.ts"
   },
   "dependencies": {
     "@astrojs/cloudflare": "14.4.6",
