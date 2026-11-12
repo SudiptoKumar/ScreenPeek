@@ -23,6 +23,10 @@ export interface ClickCaptureInput {
   clickId: string;
   variantId?: number | null;
   isTest?: boolean;
+  /** Identity overrides (F5): when the handler minted ids for this very
+   * request, the row carries them even though the request had no cookies. */
+  visitorId?: string;
+  sessionId?: string;
 }
 
 const cookieValue = (request: Request, name: string) =>
@@ -74,8 +78,8 @@ export function buildClickRow(input: ClickCaptureInput, cfg: TrackingConfig, now
     referrer,
     referrer_domain: ref.domain,
     referrer_class: ref.cls,
-    visitor_id: cookieValue(request, 'sp_vid'),
-    session_id: cookieValue(request, 'sp_sid'),
+    visitor_id: input.visitorId ?? cookieValue(request, 'sp_vid'),
+    session_id: input.sessionId ?? cookieValue(request, 'sp_sid'),
     utm_source: param('utm_source'), utm_medium: param('utm_medium'), utm_campaign: param('utm_campaign'),
     utm_content: param('utm_content'), utm_term: param('utm_term'),
     sub1: param('sub1'), sub2: param('sub2'), sub3: param('sub3'), sub4: param('sub4'), sub5: param('sub5'),

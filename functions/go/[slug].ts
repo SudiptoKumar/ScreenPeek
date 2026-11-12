@@ -3,8 +3,9 @@ import type { ManagedLink } from '../../src/lib/links.ts';
 import { requestCountry } from '../../src/lib/geo.ts';
 import { queueClick } from '../../src/lib/counters.ts';
 import type { BackgroundContext } from '../../src/lib/counters.ts';
-import { readTrackingValue, trackingEnabledFast } from '../../src/lib/tracking/config.ts';
+import { readTrackingValues } from '../../src/lib/tracking/config.ts';
 import { captureClick, newClickId } from '../../src/lib/tracking/click.ts';
+import { resolveIdentity } from '../../src/lib/tracking/identity.ts';
 
 /** Why this destination won — mirrors resolveDestination's precedence. */
 function routeReasonOf(link: ManagedLink, country: string, device: 'mobile' | 'desktop', resolved: string): string {
@@ -25,6 +26,7 @@ export async function handleGo(request: Request, env: RedirectEnvironment, conte
   if (request.method !== 'GET' && request.method !== 'HEAD') return new Response('Method not allowed', { status: 405, headers: { Allow: 'GET, HEAD', 'Cache-Control': 'no-store' } });
   if (/prefetch|prerender/i.test(`${request.headers.get('Sec-Purpose') || ''} ${request.headers.get('Purpose') || ''}`)) return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } });
   let destination = '/';
+  const identityCookies: string[] = [];
   try {
     const link = await readLink(env.CONFIG, env.DB, slug);
     const country = requestCountry(request);
@@ -38,15 +40,17 @@ export async function handleGo(request: Request, env: RedirectEnvironment, conte
         // ScreenPeek Insight capture — dark while tracking_enabled != '1',
         // backgrounded so the redirect is never delayed by it.
         try {
-          if (link && await trackingEnabledFast(env)) {
+          const switches = link ? await readTrackingValues(env, ['tracking_enabled', 'tracking_pass_click_id', 'tracking_click_param_name', 'tracking_consent_mode']) : null;
+          if (link && switches?.tracking_enabled === '1') {
             const clickId = newClickId();
-            const [pass, paramName] = await Promise.all([
-              readTrackingValue(env, 'tracking_pass_click_id'),
-              readTrackingValue(env, 'tracking_click_param_name'),
-            ]);
+            const pass = switches.tracking_pass_click_id;
+            const paramName = switches.tracking_click_param_name;
+            const identity = resolveIdentity(request, switches.tracking_consent_mode || 'basic');
+            identityCookies.push(...identity.setCookies);
             context.waitUntil(captureClick(env, {
               request, slug, linkName: link.name, linkType: link.type, destination: resolved,
               routeReason: routeReasonOf(link, country, device, resolved), clickId,
+              visitorId: identity.visitorId, sessionId: identity.sessionId,
             }));
             if (pass !== '0') {
               const target = new URL(resolved);
@@ -58,5 +62,7 @@ export async function handleGo(request: Request, env: RedirectEnvironment, conte
       }
     }
   } catch { /* Missing storage or malformed links safely return home. */ }
-  return new Response(null, { status: 302, headers: { Location: destination, 'Cache-Control': 'no-store', 'Referrer-Policy': 'strict-origin-when-cross-origin', 'X-Content-Type-Options': 'nosniff' } });
+  const headers = new Headers({ Location: destination, 'Cache-Control': 'no-store', 'Referrer-Policy': 'strict-origin-when-cross-origin', 'X-Content-Type-Options': 'nosniff' });
+  for (const cookie of identityCookies) headers.append('Set-Cookie', cookie);
+  return new Response(null, { status: 302, headers });
 }

@@ -96,3 +96,41 @@ test('G3.1-G3.6 tracking on: full click row, click id passed, iPhone model empty
     expect(onMedian - offMedian).toBeLessThan(10);
   } finally { await worker.dispose(); }
 });
+
+test('G5.1-G5.3 identity: minted on first click, shared across clicks, GPC sets nothing', async () => {
+  const worker = await testWorker({ ADS_ENABLED: '0' }, 8790);
+  try {
+    await worker.local.db.batch([
+      { sql: "UPDATE config SET value='1' WHERE key='tracking_enabled'" },
+      { sql: "INSERT INTO links(slug,name,destination,type,enabled) VALUES('gate5','Gate 5','https://example.com/offer','smartlink',1)" },
+    ]);
+    const first = await fetch(worker.base + '/go/gate5/', { redirect: 'manual' });
+    const setCookies = first.headers.getSetCookie();
+    const vid = setCookies.find(cookie => cookie.startsWith('sp_vid='))?.match(/^sp_vid=([^;]*)/)?.[1];
+    const sid = setCookies.find(cookie => cookie.startsWith('sp_sid='))?.match(/^sp_sid=([^;]*)/)?.[1];
+    expect(vid).toBeTruthy();
+    expect(sid).toBeTruthy();
+    const jar = `sp_vid=${vid}; sp_sid=${sid}`;
+    const clickIds: string[] = [];
+    for (let i = 0; i < 2; i++) {
+      const res = await fetch(worker.base + '/go/gate5/', { redirect: 'manual', headers: { Cookie: jar } });
+      clickIds.push(new URL(res.headers.get('location') || '').searchParams.get('sp_cid') || '');
+    }
+    for (const clickId of clickIds) {
+      const row = await waitForRow(worker, `SELECT * FROM tr_clicks WHERE click_id='${clickId}'`);
+      expect(row?.visitor_id).toBe(vid); // G5.1: two clicks share the visitor
+      expect(row?.session_id).toBe(sid);
+    }
+    // G5.2: no cookies -> a different visitor id is minted.
+    const cleared = await fetch(worker.base + '/go/gate5/', { redirect: 'manual' });
+    const newVid = cleared.headers.getSetCookie().find(cookie => cookie.startsWith('sp_vid='))?.match(/^sp_vid=([^;]*)/)?.[1];
+    expect(newVid).toBeTruthy();
+    expect(newVid).not.toBe(vid);
+    // G5.3: GPC signal -> no sp_vid set, and the click row carries no visitor.
+    const gpc = await fetch(worker.base + '/go/gate5/', { redirect: 'manual', headers: { 'Sec-GPC': '1' } });
+    expect(gpc.headers.getSetCookie().some(cookie => cookie.startsWith('sp_vid='))).toBe(false);
+    const gpcId = new URL(gpc.headers.get('location') || '').searchParams.get('sp_cid') || '';
+    const gpcRow = await waitForRow(worker, `SELECT * FROM tr_clicks WHERE click_id='${gpcId}'`);
+    expect(gpcRow?.visitor_id).toBe('');
+  } finally { await worker.dispose(); }
+});

@@ -145,3 +145,25 @@ export async function readTrackingValue(env: { DB: D1Database; CONFIG: KVNamespa
 export async function trackingEnabledFast(env: { DB: D1Database; CONFIG: KVNamespace }): Promise<boolean> {
   try { return (await readTrackingValue(env, 'tracking_enabled')) === '1'; } catch { return false; }
 }
+
+/**
+ * Several config values in at most one D1 query: KV mirror first per key
+ * (admin saves mirror every write), one IN-query for the misses. Keeps
+ * the /go/ response path inside its latency budget (gate G3.6).
+ */
+export async function readTrackingValues(env: { DB: D1Database; CONFIG: KVNamespace }, keys: string[]): Promise<Record<string, string | null>> {
+  const out: Record<string, string | null> = {};
+  const missing: string[] = [];
+  await Promise.all(keys.map(async key => {
+    try { out[key] = await env.CONFIG.get(`config:${key}`); } catch { out[key] = null; }
+    if (out[key] === null) missing.push(key);
+  }));
+  if (missing.length) {
+    try {
+      const placeholders = missing.map(() => '?').join(',');
+      const result = await env.DB.prepare(`SELECT key, value FROM config WHERE key IN (${placeholders})`).bind(...missing).all<{ key: string; value: string }>();
+      for (const row of result.results || []) out[row.key] = row.value;
+    } catch { /* callers treat null as the default */ }
+  }
+  return out;
+}
