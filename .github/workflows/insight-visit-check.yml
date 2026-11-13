@@ -38,7 +38,7 @@ jobs:
           for label, sql in [
               ('counts', "SELECT (SELECT COUNT(*) FROM tr_sessions WHERE date(started_at)=date('now')) AS sessions_today, (SELECT COUNT(*) FROM tr_events WHERE date(ts_received)=date('now')) AS events_today, (SELECT COUNT(*) FROM tr_clicks WHERE date(ts)=date('now')) AS clicks_today, (SELECT value FROM config WHERE key='tracking_enabled') AS tracking_enabled"),
               ('sessions', "SELECT * FROM tr_sessions ORDER BY started_at DESC LIMIT 6"),
-              ('events', "SELECT ts_received, type, page_url, page_type, payload_json FROM tr_events ORDER BY id DESC LIMIT 8"),
+              ('events', "SELECT * FROM tr_events ORDER BY id DESC LIMIT 8"),
               ('clicks', "SELECT * FROM tr_clicks ORDER BY id DESC LIMIT 6"),
           ]:
               result = query(sql)
