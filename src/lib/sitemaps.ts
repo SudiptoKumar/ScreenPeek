@@ -66,6 +66,6 @@ export async function sitemapPart(env: SitemapEnvironment, kind: SitemapKind, pa
   } catch { return error(); }
 }
 export function robots(env: SeoEnvironment) {
-  const body = productionSeo(env) ? `User-agent: *\nAllow: /\nDisallow: /admin/\nDisallow: /go/\nDisallow: /api/\nDisallow: /search/\nDisallow: /mylist/\nSitemap: ${siteOrigin(env.SITE_URL)}/sitemap.xml\n` : 'User-agent: *\nDisallow: /\n';
+  const body = productionSeo(env) ? `User-agent: *\nAllow: /\nDisallow: /admin/\nDisallow: /go/\nDisallow: /api/\nDisallow: /search/\nSitemap: ${siteOrigin(env.SITE_URL)}/sitemap.xml\n` : 'User-agent: *\nDisallow: /\n';
   return new Response(body, { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, s-maxage=3600', 'X-Content-Type-Options': 'nosniff' } });
 }

@@ -1,4 +1,5 @@
 import { manualTitles } from './home-config.ts';
+export interface HeroTitle extends TitleCard { backdrop_r2: string | null; overview: string | null; vote_count: number | null; }
 export interface TitleCard {
   id: number; type: 'movie' | 'tv'; slug: string; title: string; year: number | null;
   poster_r2: string | null; poster_color: string | null; vote_average: number | null;
@@ -88,7 +89,18 @@ export async function homeTitles(db: D1Database, includeUngated = false) {
     db.prepare(`SELECT g.slug,COALESCE(NULLIF(o.display_name,''),g.name) name,g.title_count FROM genres g LEFT JOIN taxonomy_overrides o ON o.kind='genre' AND o.slug=g.slug AND o.deleted_at IS NULL WHERE g.title_count>0 AND COALESCE(o.hidden,0)=0 ORDER BY COALESCE(o.ord,0),g.title_count DESC,name LIMIT 50`).all<{ slug: string; name: string; title_count: number }>(),
   ]);
   // 6+6+6+6 poster cards maximum; Top10 is a text-only ranked list.
-  return { trending, top10, toprated, movies, series, upcoming, genres: genres.results };
+  const shelf = async (pattern: string, order: string) =>
+    (await db.prepare(`SELECT ${fields} FROM titles t JOIN providers p ON p.title_id=t.id AND p.title_type=t.type WHERE ${where} AND p.country='US' AND p.offer_type='stream' AND p.provider_name LIKE ? GROUP BY t.id ORDER BY ${order},t.id DESC LIMIT 10`).bind(pattern).all<TitleCard>()).results;
+  const pinnedFirst = "CASE WHEN t.pinned=1 AND (t.pin_starts_at IS NULL OR datetime(t.pin_starts_at)<=datetime('now')) AND (t.pin_ends_at IS NULL OR datetime(t.pin_ends_at)>datetime('now')) THEN 1 ELSE 0 END DESC,t.popularity DESC";
+  const [trendingMovies, trendingSeries, netflixNew, netflixTrend, primeNew, appleNew, heroRows] = await Promise.all([
+    query("AND t.type='movie'", 't.popularity DESC', 10),
+    query("AND t.type='tv'", 't.popularity DESC', 10),
+    shelf('Netflix', 't.added_at DESC'), shelf('Netflix', 't.popularity DESC'),
+    shelf('Amazon Prime%', 't.added_at DESC'), shelf('Apple TV%', 't.added_at DESC'),
+    db.prepare(`SELECT ${fields},t.backdrop_r2,t.overview,t.vote_count FROM titles t WHERE ${where} ORDER BY ${pinnedFirst},t.id DESC LIMIT 1`).all<HeroTitle>(),
+  ]);
+  return { trending, top10, toprated, movies, series, upcoming, genres: genres.results,
+    hero: heroRows.results[0] ?? null, trendingMovies, trendingSeries, netflixNew, netflixTrend, primeNew, appleNew };
 }
 
 /** Every genre that has titles, for the /genres/ index page (no cap). */

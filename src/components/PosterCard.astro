@@ -2,13 +2,12 @@
 import type { TitleCard } from '../lib/catalogue';
 import { titleUrl } from '../lib/catalogue';
 import { mediaUrl } from '../lib/media';
-import { rating, timeAgo } from '../lib/format';
+import { rating } from '../lib/format';
 interface Props { title: TitleCard; mediaBase?: string; eager?: boolean; annotation?: string; }
 const { title, mediaBase, eager = false, annotation } = Astro.props;
 const image = mediaUrl(title.poster_r2, mediaBase, 185);
 const color = /^#[a-f\d]{6}$/i.test(title.poster_color || '') ? title.poster_color! : '#20202B';
 const score = title.vote_average === null ? 'Unrated' : `TMDb rating ${title.vote_average.toFixed(1)} out of 10`;
-const views = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(title.views);
 ---
 <div class="poster-item"><a class="poster-card" data-poster-card href={titleUrl(title)}>
   <div class="poster-frame" style={`--poster-color:${color}`}>
@@ -25,6 +24,4 @@ const views = new Intl.NumberFormat('en', { notation: 'compact', maximumFraction
   <h3 class="poster-title">{title.title}</h3>
   {annotation && <p class="poster-credit" data-credit-label>{annotation}</p>}
   <p class="poster-meta">{title.year ?? 'Year TBA'} <span aria-hidden="true">·</span> <span>TMDb</span></p>
-  <p class="poster-activity">≈ {views} views <span aria-hidden="true">·</span> {timeAgo(title.updated_at)}</p>
-</a>
-<button class="card-save" type="button" disabled data-mylist-toggle data-title-id={title.id} data-title-type={title.type} data-slug={title.slug} data-title={title.title} data-year={title.year ?? ''} data-poster={image || ''} aria-pressed="false" aria-label={`My List: ${title.title}`}>+ My List</button></div>
+</a></div>

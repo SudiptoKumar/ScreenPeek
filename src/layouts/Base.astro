@@ -64,7 +64,7 @@ if (pageType !== 'utility' && Astro.url.pathname !== '/' && !structured.some(sch
       <a class="brand" href="/" aria-label={`${site.name} home`}>{logo ? <img src={logo} width="128" height="32" alt={site.name} /> : site.name === 'ScreenPeek' ? <>Screen<span>Peek</span></> : site.name}</a>
       <nav class="desktop-nav" aria-label="Main navigation">
         <a href="/movies/">Movies</a><a href="/series/">Series</a>
-        <a href="/top10/">Top 10</a><a href="/top-rated/">Top Rated</a><a href="/genres/">Genres</a><a href="/upcoming/">Upcoming</a><a href="/mylist/">My List</a>
+        <a href="/top10/">Top 10</a><a href="/top-rated/">Top Rated</a><a href="/genres/">Genres</a><a href="/upcoming/">Upcoming</a>
       </nav>
       <form class="header-search" action="/search/" role="search" autocomplete="off"><label class="sr-only" for="search">Search titles</label>
         <input id="search" name="q" type="search" placeholder="Search movies & shows" maxlength="100" autocomplete="off" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-controls="search-suggestions" aria-expanded="false" />
@@ -75,13 +75,12 @@ if (pageType !== 'utility' && Astro.url.pathname !== '/' && !structured.some(sch
         </div>
       </form>
       <details class="mobile-menu"><summary aria-label="Open navigation">Menu</summary>
-        <nav aria-label="Mobile navigation"><a href="/movies/">Movies</a><a href="/series/">Series</a><a href="/top10/">Top 10</a><a href="/top-rated/">Top Rated</a><a href="/genres/">Genres</a><a href="/upcoming/">Upcoming</a><a href="/mylist/">My List</a></nav>
+        <nav aria-label="Mobile navigation"><a href="/movies/">Movies</a><a href="/series/">Series</a><a href="/top10/">Top 10</a><a href="/top-rated/">Top Rated</a><a href="/genres/">Genres</a><a href="/upcoming/">Upcoming</a></nav>
       </details>
     </header>
     <main id="content">
       {sample && <p class="notice sample-notice"><strong>Sample catalogue</strong> · These titles are synthetic development data. Remove the sample seed before live imports.</p>}
       <slot />
-      <p class="sr-only" data-library-status role="status" aria-live="polite"></p>
     </main>
     <footer class="site-footer">
       <nav aria-label="Browse"><a href="/movies/">Movies</a><a href="/series/">Series</a><a href="/top-rated/">Top Rated</a><a href="/genres/">Genres</a><a href="/top10/">Top 10</a><a href="/upcoming/">Upcoming</a></nav>
@@ -94,7 +93,6 @@ if (pageType !== 'utility' && Astro.url.pathname !== '/' && !structured.some(sch
     {pageType === 'detail' && <Popunder />}
     <script>
       import '../scripts/search';
-      import '../scripts/library';
       import '../scripts/ad-offset';
     </script>
     {insight && <script is:inline set:html={`window.__spT=${JSON.stringify(insight)};`}></script>}

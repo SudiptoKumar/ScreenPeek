@@ -58,9 +58,8 @@ const gallery = parseJsonArray<string>(title?.gallery_r2).filter(key => typeof k
       <p class="title-originality">{originality.facts}</p>
       {originality.updated && <p class="poster-meta">Updated <time datetime={originality.updated}>{formatDate(originality.updated)}</time></p>}
       <RatingStrip score={title.vote_average} count={title.vote_count} external={data.external} />
-      <div class="detail-actions" data-detail-section="actions"><a class="button primary" href={watchUrl}>Where to Watch →</a><a class="button" href={trailerUrl}>Trailer</a>
-        <button type="button" disabled data-mylist-toggle data-title-id={title.id} data-title-type={title.type} data-slug={title.slug} data-title={title.title} data-year={title.year ?? ''} data-poster={savedPoster || ''} aria-pressed="false">+ My List</button></div>
-      <noscript><p class="control-preview">Enable JavaScript and browser storage to save titles and vote.</p></noscript>
+      <div class="detail-actions" data-detail-section="actions"><a class="button primary" href={watchUrl}>Where to Watch →</a><a class="button" href={trailerUrl}>Trailer</a></div>
+      <noscript><p class="control-preview">Enable JavaScript to vote.</p></noscript>
       {providers.length > 0 && <section class="watch-summary" aria-label="Where to Watch summary" data-detail-section="providers"><p>Watch options in {country}: <strong>{providers.slice(0, 3).map(provider => provider.provider_name).join(', ')}</strong>{providers.length > 3 && ` +${providers.length - 3} more`}.</p><div class="streaming-strip" aria-label="Streaming on">{streamers.length > 0 && <span>Streaming on</span>}{streamers.slice(0, 3).map(provider => {
           const logo = mediaUrl(provider.logo_r2, mediaBase, 185);
           return <a href={watchUrl} data-no-popunder>{logo && <img src={logo} width="28" height="28" loading="lazy" decoding="async" alt="" />}<span>{provider.provider_name}</span></a>;
