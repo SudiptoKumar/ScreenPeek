@@ -7,6 +7,7 @@ import { globalSearch } from './tools.ts';
 import type { ToolResults } from './tools.ts';
 import { trackingAdminData } from './tracking-data.ts';
 import type { TrackingAdminData } from './tracking-data.ts';
+import { deadLinkSlugs } from '../tracking/health.ts';
 
 export interface AdminLink { slug: string; name: string; destination: string; type: string; enabled: number; rules: string; clicks_total: number; clicks_today: number; clicks_day: string | null; starts_at: string | null; ends_at: string | null; revision: number; }
 export interface AdminAd { page_type: AdPage; placement: AdPlacement; code: string; enabled: number; test_mode: number; starts_at: string | null; ends_at: string | null; revision: number; }
@@ -23,6 +24,7 @@ export async function adminData(env: AdminEnvironment, actor: AdminIdentity, mod
   const db = env.DB, query = (url.searchParams.get('q') || '').slice(0, 100), page = Math.min(100_000, Math.max(1, Number.parseInt(url.searchParams.get('page') || '1') || 1));
   let links: AdminLink[] = [], selectedLink: AdminLink | null = null, slots: AdminAd[] = [], titles: AdminTitle[] = [], sync: SyncRow[] = [], changes: HistoryRow[] = [], settings: SettingRow[] = [];
   let total = 0, pending = 0, catalogue: CatalogueMeters | null = null, tools: ToolResults | null = null, revenue: RevenueMeters | null = null, tracking: TrackingAdminData | null = null;
+  let deadLinks: string[] = [];
   let documents: TrustDocument[] = [];
   if (module === 'links') {
     const where = '(name LIKE ? ESCAPE \'\\\' OR slug LIKE ? ESCAPE \'\\\') AND deleted_at IS NULL';
@@ -72,7 +74,10 @@ export async function adminData(env: AdminEnvironment, actor: AdminIdentity, mod
   }
   else if (module === 'tools') tools = await globalSearch(db, query);
   else if (module === 'tracking') tracking = await trackingAdminData(env, url).catch(() => null);
-  return { links, selectedLink, slots, titles, sync, changes, settings, documents, total, page, pages: Math.max(1, Math.ceil(total / 50)), query, pending, catalogue, tools, revenue, tracking };
+  if (module === 'links') {
+    deadLinks = (await deadLinkSlugs(db).catch(() => [])).map(row => row.slug);
+  }
+  return { links, selectedLink, slots, titles, sync, changes, settings, documents, total, page, pages: Math.max(1, Math.ceil(total / 50)), query, pending, catalogue, tools, revenue, tracking, deadLinks };
 }
 export type AdminData = Awaited<ReturnType<typeof adminData>>;
 export async function exportAdminBackup(env: AdminEnvironment, actor: AdminIdentity) {

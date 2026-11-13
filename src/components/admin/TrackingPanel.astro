@@ -11,7 +11,9 @@ const view = data?.view ?? 'overview';
 const list = data?.list ?? null;
 const detail = data?.detail ?? null;
 const filters = data?.filters;
-const viewLabels: Record<string, string> = { overview: 'Overview', clicks: 'Clicks', pages: 'Pages', sessions: 'Sessions', conversions: 'Conversions', quality: 'Quality', charts: 'Charts', export: 'Export', settings: 'Settings', tools: 'Tools' };
+const viewLabels: Record<string, string> = { overview: 'Overview', clicks: 'Clicks', pages: 'Pages', sessions: 'Sessions', conversions: 'Conversions', funnels: 'Funnels', quality: 'Quality', variants: 'Variants', charts: 'Charts', export: 'Export', settings: 'Settings', tools: 'Tools', alerts: 'Alerts' };
+const funnelsData = data?.funnels ?? null;
+const variantsData = data?.variants ?? null;
 const money = (minor: number, currency: string) => `${currency} ${(minor / 100).toFixed(2)}`;
 const quotaPct = overview ? Math.min(100, Math.round((overview.storedRaw / Math.max(1, overview.cfg.dailyCap)) * 100)) : 0;
 const icons = {
@@ -58,6 +60,7 @@ const detailGroups: Array<{ title: string; fields: Array<[string, string, string
     <section class="widget"><h2><svg class="widget-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" set:html={icons.eye}></svg>Pageviews today</h2><p class="admin-big">{overview.pageviewsToday.toLocaleString()}</p><small>{overview.sessionsToday.toLocaleString()} sessions started</small></section>
     <section class="widget"><h2><svg class="widget-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" set:html={icons.gauge}></svg>Raw data quota</h2><p class="admin-big">{overview.storedRaw.toLocaleString()} / {overview.cfg.dailyCap.toLocaleString()}</p><small>Stored raw {overview.storedRaw.toLocaleString()} of {overview.totalRaw.toLocaleString()} total today</small><span class="format-track"><span class="format-fill" style={`width:${quotaPct}%;background:#38bdf8`}></span></span></section>
   </div>
+  {overview.deadLinks.length > 0 && <section class="catalogue-section"><h2>Link health — dead destinations</h2><p class="notice admin-error" role="alert">These destinations failed their health check two days running. They are also badged in the Links section.</p><div class="admin-table"><table><thead><tr><th>Link</th><th>Destination</th><th>Last result</th></tr></thead><tbody>{overview.deadLinks.map(row => <tr><td>{row.slug}</td><td>{row.url}</td><td>{row.httpStatus ? `HTTP ${row.httpStatus}` : 'No answer / timeout'}</td></tr>)}</tbody></table></div></section>}
   <section class="catalogue-section"><h2>Live feed — latest clicks</h2>
     {overview.liveFeed.length ? <div class="admin-table"><table><thead><tr><th>Time (UTC)</th><th>Link</th><th>Country</th><th>Device</th><th>Destination</th><th>Quality</th><th>Consistency</th></tr></thead><tbody>{overview.liveFeed.map(row => <tr><td>{String(row.ts || '').slice(11, 19)}</td><td>{String(row.slug || '')}<small>{String(row.route_reason || '')}</small></td><td>{String(row.country || '—')}</td><td>{String(row.device_type || '')}{row.device_model ? ` · ${String(row.device_model)}` : ''}</td><td>{String(row.dest_host || '')}</td><td>{String(row.quality_band || 'clean')}</td><td>{row.disguise_score === null || row.disguise_score === undefined ? '—' : `${String(row.disguise_score)} / 100`}</td></tr>)}</tbody></table></div>
     : <p class="quiet-empty">No clicks recorded yet{overview.cfg.enabled ? ' today — the feed fills as visitors click tracked links.' : ' — tracking is off, so nothing is being collected.'}</p>}
@@ -86,11 +89,69 @@ const detailGroups: Array<{ title: string; fields: Array<[string, string, string
   {list && list.rows.length > 0 && (view === 'clicks' || view === 'quality') && <div class="admin-table"><table><thead><tr><th>Time (UTC)</th><th>Click ID</th><th>Link</th><th>Country</th><th>Device</th><th>Browser</th><th>Destination</th><th>Band</th><th>Consistency</th></tr></thead><tbody>{list.rows.map(row => <tr><td>{str(row, 'ts')}</td><td><a href={`?view=clicks&click=${encodeURIComponent(str(row, 'click_id'))}`}>{str(row, 'click_id').slice(0, 13)}…</a></td><td>{str(row, 'slug')}</td><td>{str(row, 'country') || '—'}</td><td>{str(row, 'device_type')}{str(row, 'device_model') ? ` · ${str(row, 'device_model')}` : ''}</td><td>{str(row, 'browser')}</td><td>{str(row, 'dest_host')}</td><td>{str(row, 'quality_band')}</td><td>{row.disguise_score === null || row.disguise_score === undefined ? '—' : String(row.disguise_score)}</td></tr>)}</tbody></table></div>}
   {list && list.rows.length > 0 && view === 'pages' && <div class="admin-table"><table><thead><tr><th>Page</th><th>Type</th><th>Pageviews</th><th>Sessions</th><th>CTA clicks</th><th>Avg duration (s)</th><th>Avg scroll %</th></tr></thead><tbody>{list.rows.map(row => <tr><td>{str(row, 'page_url')}</td><td>{str(row, 'page_type')}</td><td>{num(row, 'pageviews').toLocaleString()}</td><td>{num(row, 'unique_sessions').toLocaleString()}</td><td>{num(row, 'cta_clicks').toLocaleString()}</td><td>{num(row, 'avg_duration_s')}</td><td>{num(row, 'avg_max_scroll_pct')}</td></tr>)}</tbody></table></div>}
   {list && list.rows.length > 0 && view === 'sessions' && <div class="admin-table"><table><thead><tr><th>Started (UTC)</th><th>Visitor</th><th>Country</th><th>Device</th><th>Pages</th><th>Duration (s)</th><th>Max scroll %</th><th>Entry → exit</th></tr></thead><tbody>{list.rows.map(row => <tr><td>{str(row, 'started_at')}</td><td>{str(row, 'visitor_id').slice(0, 8) || '—'}</td><td>{str(row, 'country') || '—'}</td><td>{str(row, 'device_type')}</td><td>{num(row, 'pageviews')}</td><td>{num(row, 'total_duration_s')}</td><td>{num(row, 'max_scroll_pct')}</td><td>{str(row, 'entry_page')}<small>{str(row, 'exit_page')}</small></td></tr>)}</tbody></table></div>}
-  {list && list.rows.length > 0 && view === 'conversions' && <div class="admin-table"><table><thead><tr><th>Received (UTC)</th><th>Network</th><th>Event</th><th>Status</th><th>Payout</th><th>Transaction</th><th>Link</th><th>Country</th></tr></thead><tbody>{list.rows.map(row => <tr><td>{str(row, 'ts_received')}</td><td>{str(row, 'network')}</td><td>{str(row, 'event')}</td><td>{str(row, 'status_mapped')}{str(row, 'status_raw') ? <small>{str(row, 'status_raw')}</small> : ''}</td><td>{money(num(row, 'payout_minor'), str(row, 'currency') || 'USD')}</td><td>{str(row, 'txid')}</td><td>{str(row, 'slug')}</td><td>{str(row, 'country')}</td></tr>)}</tbody></table></div>}
+  {list && list.rows.length > 0 && view === 'conversions' && <div class="admin-table"><table><thead><tr><th>Received (UTC)</th><th>Network</th><th>Source</th><th>Event</th><th>Status</th><th>Payout</th><th>Transaction</th><th>Link</th><th>Country</th></tr></thead><tbody>{list.rows.map(row => <tr><td>{str(row, 'ts_received')}</td><td>{str(row, 'network')}</td><td>{str(row, 'source') === 'pixel' ? <>pixel<small>network-reported via pixel</small></> : 'S2S postback'}</td><td>{str(row, 'event')}</td><td>{str(row, 'status_mapped')}{str(row, 'status_raw') ? <small>{str(row, 'status_raw')}</small> : ''}</td><td>{money(num(row, 'payout_minor'), str(row, 'currency') || 'USD')}</td><td>{str(row, 'txid')}</td><td>{str(row, 'slug')}</td><td>{str(row, 'country')}</td></tr>)}</tbody></table></div>}
   {list && list.pages > 1 && <nav class="pagination" aria-label="Tracking list pages">{list.page > 1 && <a href={listHref(list.page - 1)}>Previous</a>}<span>Page {list.page} of {list.pages}</span>{list.page < list.pages && <a href={listHref(list.page + 1)}>Next</a>}</nav>}
   {detail && <section class="catalogue-section"><h2>Click detail — {str(detail, 'click_id')}</h2><p>Recorded {str(detail, 'ts')} UTC. Location fields are an IP estimate; device fields are best effort from the user agent.</p>{detailGroups.map(group => <><h3>{group.title}</h3><dl class="title-facts">{group.fields.map(([label, key, note]) => <div><dt>{label}</dt><dd>{str(detail, key) === '' ? '—' : str(detail, key)}{note ? <small> {note}</small> : ''}</dd></div>)}</dl></>)}</section>}
   {Astro.url.searchParams.has('click') && !detail && <p class="notice admin-error" role="alert">That click ID is not in the stored raw data — it may have been skipped by the daily cap or aged out under retention.</p>}
 </>}
+{data && view === 'conversions' && <section class="catalogue-section"><h2>Outgoing postbacks</h2>
+  <p>Callbacks fired to networks when a conversion is stored, from the fire-URL template in the Networks setting. Only the destination host and path are kept here — never the full URL with its values. Failed rows retry after 1 minute, 10 minutes and 1 hour.</p>
+  {data.outgoing && data.outgoing.length ? <div class="admin-table"><table><thead><tr><th>ID</th><th>Network</th><th>Destination (host + path)</th><th>Status</th><th>HTTP</th><th>Attempts</th><th>Last try (UTC)</th><th></th></tr></thead><tbody>{data.outgoing.map(row => <tr><td>{num(row, 'id')}</td><td>{str(row, 'network')}</td><td>{str(row, 'url_host')}</td><td>{str(row, 'status')}</td><td>{row.http_status === null || row.http_status === undefined ? '—' : num(row, 'http_status') || 'no answer'}</td><td>{num(row, 'attempts')}</td><td>{str(row, 'last_try_at') || '—'}</td><td>{str(row, 'status') === 'failed' && actor.role === 'owner' ? <form method="post" action="/admin/tracking/?view=conversions"><input type="hidden" name="action" value="tracking_refire_outgoing" /><input type="hidden" name="id" value={num(row, 'id')} /><button type="submit">Re-fire</button></form> : ''}</td></tr>)}</tbody></table></div>
+  : <p class="quiet-empty">No outgoing postbacks yet. They appear when a stored conversion matches a network that has a fire-URL template.</p>}
+</section>}
+{data && view === 'funnels' && filters && <section class="catalogue-section"><h2>Conversion funnels</h2>
+  <form class="admin-search" method="get"><input type="hidden" name="view" value="funnels" />
+    <label>From<input type="date" name="from" value={filters.from} required /></label>
+    <label>To<input type="date" name="to" value={filters.to} required /></label>
+    {funnelsData && funnelsData.chains.length > 1 && <label>Network<select name="network">{funnelsData.chains.map(chain => <option value={chain.network} selected={funnelsData.network === chain.network}>{chain.network}</option>)}</select></label>}
+    <button type="submit">Search</button>
+  </form>
+  {funnelsData && funnelsData.steps.length ? <>
+    <p>Chain for {funnelsData.network}: clicks → {funnelsData.steps.map(step => step.label).join(' → ')}. Each step shows its count and the conversion rate from the previous step, per link, from stored rows ({filters.from} to {filters.to}).</p>
+    {funnelsData.rows.length ? <div class="admin-table"><table><thead><tr><th>Link</th><th>Clicks</th>{funnelsData.steps.map(step => <th>{step.label}</th>)}</tr></thead><tbody>{funnelsData.rows.map(row => <tr><td>{row.slug}</td><td>{row.clicks.toLocaleString()}</td>{row.counts.map((count, index) => <td>{count.toLocaleString()}{row.rates[index] !== null ? <small>{row.rates[index]}% of previous step</small> : ''}</td>)}</tr>)}</tbody></table></div>
+    : <p class="quiet-empty">No stored clicks or conversions in this range yet.</p>}
+  </> : <p class="quiet-empty">No funnel chain is configured. Add one in Tracking Settings — Funnels (JSON) — mapping a network to its ordered events, for example {'{"mynetwork": [{"event": "lead", "label": "Lead"}, {"event": "sale", "label": "Sale"}]}'}. Networks without a chain keep the normal single-event Conversions list.</p>}
+</section>}
+{data && view === 'variants' && <section class="catalogue-section"><h2>Link variants — rotation & A/B</h2>
+  <form class="admin-search" method="get"><input type="hidden" name="view" value="variants" />
+    <label>Link<select name="link">{variantsData?.slugs.map(item => <option value={item.slug} selected={variantsData?.slug === item.slug}>{item.slug}</option>)}</select></label>
+    <button type="submit">Search</button>
+  </form>
+  {variantsData && variantsData.slug && <>
+    <p>Variants split this link's traffic by weight. When the picked variant hits its daily cap, the next variant in chain order serves; when all are capped, the link's normal destination serves. Stats cover the last 7 days.</p>
+    {variantsData.stats.length > 1 && (variantsData.leaderId
+      ? <p class="notice" role="status">A/B readout: variant {variantsData.leaderId} leads on earnings per click. Every variant has at least {variantsData.minSample} clicks, so the sample is big enough to read.</p>
+      : <p class="notice" role="status">A/B readout: not enough data to call a leader — a variant needs at least {variantsData.minSample} clicks before any winner is claimed.</p>)}
+    {variantsData.variants.length ? <div class="admin-table"><table><thead><tr><th>ID</th><th>Destination</th><th>Weight</th><th>Chain</th><th>Active</th><th>Caps (clicks / conv)</th><th>Clicks 7d</th><th>Conv. 7d</th><th>CR %</th><th>EPC</th></tr></thead><tbody>{variantsData.variants.map(row => { const stat = variantsData.stats.find(item => item.variantId === Number(row.id)); return <tr style={variantsData.leaderId === Number(row.id) ? 'background:#052e22' : undefined}><td>{String(row.id)}</td><td>{String(row.dest_url)}</td><td>{String(row.weight)}</td><td>{String(row.chain_order)}</td><td>{Number(row.active) ? 'yes' : 'no'}</td><td>{String(row.cap_clicks_day)} / {String(row.cap_conv_day)}</td><td>{stat?.clicks.toLocaleString() ?? 0}</td><td>{stat?.conversions.toLocaleString() ?? 0}</td><td>{stat?.cr ?? 0}</td><td>{stat?.epc ?? 0}</td></tr>; })}</tbody></table></div>
+    : <p class="quiet-empty">This link has no variants yet — it always serves its normal destination. Add one below to start a split.</p>}
+    {actor.role === 'owner' && <>
+    <h3>Add or edit a variant</h3>
+    <form class="admin-form" method="post" action={`/admin/tracking/?view=variants&link=${variantsData.slug}`}>
+      <input type="hidden" name="action" value="tracking_variant_save" />
+      <input type="hidden" name="slug" value={variantsData.slug} />
+      <label>Variant ID (blank = new)<input name="id" inputmode="numeric" maxlength="12" /></label>
+      <label>Destination URL *<input name="dest_url" maxlength="2048" required /></label>
+      <label>Weight (0–100)<input name="weight" type="number" value="50" min="0" max="100" /></label>
+      <label>Chain order<input name="chain_order" type="number" value="0" /></label>
+      <label>Daily click cap (0 = none)<input name="cap_clicks_day" type="number" value="0" min="0" /></label>
+      <label>Daily conversion cap (0 = none)<input name="cap_conv_day" type="number" value="0" min="0" /></label>
+      <label>Schedule (JSON, blank = always)<input name="schedule" maxlength="500" placeholder='{"days":[1,2,3,4,5],"start":"09:00","end":"17:00","tz":"UTC"}' /></label>
+      <label>Note<input name="note" maxlength="200" /></label>
+      <label>Active<input type="checkbox" name="active" value="1" checked /></label>
+      <label>Locked — the auto-optimiser never moves this variant's weight<input type="checkbox" name="locked" value="1" /></label>
+      <button type="submit">Save variant</button>
+    </form>
+    <h3>Link routing settings</h3>
+    <form class="admin-form" method="post" action={`/admin/tracking/?view=variants&link=${variantsData.slug}`}>
+      <input type="hidden" name="action" value="tracking_link_settings" />
+      <input type="hidden" name="slug" value={variantsData.slug} />
+      <label>Auto-optimiser may tune this link<input type="checkbox" name="autoopt" value="1" checked={variantsData.settings.autoopt === 1} /></label>
+      <label>Safe page URL (quality gate)<input name="safe_url" value={variantsData.settings.safe_url} maxlength="2048" /><small>Only used when the quality gate is switched on in Tracking Settings and a click scores 2+ quality signals. Blank = gate does nothing for this link.</small></label>
+      <button type="submit">Save link settings</button>
+    </form></>}
+    {actor.role !== 'owner' && <p class="notice" role="status">Variant editing is owner-only.</p>}
+  </>}
+</section>}
 {data && view === 'charts' && filters && <>
   <form class="admin-search" method="get"><input type="hidden" name="view" value="charts" />
     <label>From<input type="date" name="from" value={filters.from} required /></label>
@@ -112,6 +173,11 @@ const detailGroups: Array<{ title: string; fields: Array<[string, string, string
     </div>
   </> : <p class="quiet-empty">No aggregate data in this date range yet. Charts appear once clicks are counted.</p>}
 </>}
+{data && view === 'charts' && <section class="catalogue-section"><h2>Profit & ROI</h2>
+  <p>Revenue from the daily aggregates; cost from imported rows plus CPC rules over stored clicks (an estimate — imported CSV cost is exact). Each currency stands alone and is never summed with another. A link with revenue but no cost data shows "—" for cost, not zero.</p>
+  {data.profit && data.profit.length ? <div class="admin-table"><table><thead><tr><th>Link</th><th>Currency</th><th>Revenue</th><th>Cost</th><th>Profit</th><th>ROI</th></tr></thead><tbody>{data.profit.map(row => <tr><td>{row.slug}</td><td>{row.currency}</td><td>{money(row.revenueMinor, row.currency)}</td><td>{row.costMinor === null ? '—' : money(row.costMinor, row.currency)}</td><td>{row.profitMinor === null ? '—' : money(row.profitMinor, row.currency)}</td><td>{row.roiPct === null ? '—' : `${row.roiPct}%`}</td></tr>)}</tbody></table></div>
+  : <p class="quiet-empty">No revenue or cost in this range yet.</p>}
+</section>}
 {data && view === 'export' && filters && <section class="catalogue-section"><h2>Export centre</h2>
   <p>Exports are capped at 3,000 rows — the same cap as raw storage per day. The count is shown before you download; anything over the cap must be narrowed with filters first. IP addresses are left out unless the owner asks for them and confirms.</p>
   {exportCounts && <div class="admin-table"><table><thead><tr><th>Dataset</th><th>Rows in range</th></tr></thead><tbody>{(['clicks', 'conversions', 'sessions', 'postbacks'] as const).map(name => <tr><td>{name}</td><td>{exportCounts[name].toLocaleString()}{exportCounts[name] > 3000 ? ' — over the limit, narrow your filters' : ''}</td></tr>)}</tbody></table></div>}
@@ -160,6 +226,20 @@ const detailGroups: Array<{ title: string; fields: Array<[string, string, string
     <label>Status<input name="status" value="approved" maxlength="40" /></label>
     <button type="submit">Send test postback</button>
   </form>
+  <h3>Outgoing postback test-fire</h3>
+  <p>Sends one clearly-marked TEST payload to a fire-URL template so you can check the receiving endpoint. No conversion and no queue row is created.</p>
+  <form class="admin-form" method="post" action="/admin/tracking/?view=tools">
+    <input type="hidden" name="action" value="tracking_testfire_outgoing" />
+    <label>Fire-URL template<input name="template" maxlength="2000" placeholder="https://their.endpoint/pb?cid={click_id}&payout={payout}&currency={currency}" required /></label>
+    <button type="submit">Send test-fire</button>
+  </form>
+  <h3>Import daily costs (CSV)</h3>
+  <p>Exact per-day costs land in the profit table (Charts view). One row per line: day, link slug, source token, cost as a decimal amount, currency. A header row is fine. Bad rows are rejected with their line numbers and the rest still import.</p>
+  <form class="admin-form" method="post" action="/admin/tracking/?view=tools">
+    <input type="hidden" name="action" value="tracking_cost_import" />
+    <label>CSV rows<textarea name="csv" rows="5" maxlength="100000" placeholder={'day,link_slug,source,cost,currency\n2026-11-13,smartlink-main,promo-a,12.50,USD'}></textarea></label>
+    <button type="submit">Import costs</button>
+  </form>
   <h3>Purge test data</h3>
   <p>Deletes every row marked as test data (test clicks, their conversions, events and sessions). Real visitor data is untouched.</p>
   <form class="admin-form" method="post" action="/admin/tracking/?view=tools" onsubmit="return confirm('Delete all Insight test data?')">
@@ -174,4 +254,9 @@ const detailGroups: Array<{ title: string; fields: Array<[string, string, string
     <button type="submit">Run retention</button>
   </form></>}
   {actor.role !== 'owner' && <p class="notice" role="status">The postback tester, test-data purge and retention run are owner-only.</p>}
+</section>}
+{data && view === 'alerts' && <section class="catalogue-section"><h2>Insight alerts</h2>
+  <p>One alert per event per day. Alerts are always recorded here; sending to Telegram happens only when the Alert channels setting names it and the money-bot chat is connected. Kinds: daily storage cap, variant cap hits, auto-optimiser shifts, conversion-rate drops, outgoing-postback failure streaks and dead destinations.</p>
+  {data.alerts && data.alerts.length ? <div class="admin-table"><table><thead><tr><th>Day</th><th>Kind</th><th>About</th><th>Message</th><th>Sent</th></tr></thead><tbody>{data.alerts.map(row => <tr><td>{str(row, 'day')}</td><td>{str(row, 'kind')}</td><td>{str(row, 'ref')}</td><td>{str(row, 'message')}</td><td>{num(row, 'sent') ? 'yes' : 'no'}</td></tr>)}</tbody></table></div>
+  : <p class="quiet-empty">No alerts recorded yet. They appear here when a cap is hit, a destination dies, the optimiser moves weights, or a conversion rate drops sharply.</p>}
 </section>}

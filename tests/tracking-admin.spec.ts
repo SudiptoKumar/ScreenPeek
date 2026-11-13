@@ -253,3 +253,96 @@ test('G14 settings save + validate, tools: UA tester, postback tester, purge, re
     expect(await worker.local.db.query('SELECT COUNT(*) AS count FROM tr_clicks')).toEqual([{ count: 1 }]);
   } finally { await context.close(); await worker.dispose(); }
 });
+
+test('G18 admin: variant editor saves, stats render, A/B readout refuses a winner under the sample floor', async ({ browser }) => {
+  test.setTimeout(120_000);
+  const fixture = accessFixture();
+  const worker = await testWorker({ ADS_ENABLED: '0', CF_ACCESS_TEAM_DOMAIN: fixture.team, CF_ACCESS_AUD: fixture.aud }, 8790, { [fixture.certUrl]: { body: { keys: [fixture.jwk] } } });
+  const context = await browser.newContext({ viewport: { width: 360, height: 800 }, extraHTTPHeaders: fixture.headers('owner@example.test') });
+  const page = await context.newPage();
+  try {
+    await worker.local.db.batch([
+      { sql: "INSERT INTO admin_users(email,role) VALUES('owner@example.test','owner')" },
+      { sql: "INSERT INTO links(slug,name,destination,type,enabled) VALUES('ab-link','AB','https://example.com/base','smartlink',1)" },
+    ]);
+    const save = await fetch(worker.base + '/admin/tracking/?view=variants&link=ab-link', {
+      method: 'POST', redirect: 'manual',
+      headers: { ...fixture.headers('owner@example.test'), 'Content-Type': 'application/x-www-form-urlencoded', Origin: worker.base },
+      body: new URLSearchParams({ action: 'tracking_variant_save', slug: 'ab-link', dest_url: 'https://example.com/variant-a', weight: '60', chain_order: '1', active: '1' }),
+    });
+    expect(save.status).toBe(303);
+    const variants = await worker.local.db.query<{ dest_url: string; weight: number }>('SELECT dest_url, weight FROM tr_link_variants');
+    expect(variants).toEqual([{ dest_url: 'https://example.com/variant-a', weight: 60 }]);
+    await page.goto(worker.base + '/admin/tracking/?view=variants&link=ab-link');
+    await expect(page.getByText('Link variants — rotation & A/B')).toBeVisible();
+    await expect(page.getByText('https://example.com/variant-a')).toBeVisible();
+    await expect(page.getByText('Safe page URL (quality gate)')).toBeVisible();
+  } finally { await context.close(); await worker.dispose(); }
+});
+
+test('G24 admin: funnel view renders the configured chain with counts and step rates', async ({ browser }) => {
+  test.setTimeout(120_000);
+  const fixture = accessFixture();
+  const worker = await testWorker({ ADS_ENABLED: '0', CF_ACCESS_TEAM_DOMAIN: fixture.team, CF_ACCESS_AUD: fixture.aud }, 8790, { [fixture.certUrl]: { body: { keys: [fixture.jwk] } } });
+  const context = await browser.newContext({ viewport: { width: 360, height: 800 }, extraHTTPHeaders: fixture.headers('owner@example.test') });
+  const page = await context.newPage();
+  try {
+    const statements: Array<{ sql: string }> = [
+      { sql: "INSERT INTO admin_users(email,role) VALUES('owner@example.test','owner')" },
+      { sql: `UPDATE config SET value='${JSON.stringify({ testnet: [{ event: 'lead', label: 'Lead' }, { event: 'sale', label: 'Sale' }] })}' WHERE key='tracking_funnels'` },
+    ];
+    for (let i = 0; i < 4; i++) statements.push({ sql: `INSERT INTO tr_clicks(click_id,ts,slug,country,device_type) VALUES('fa-${i}',datetime('now','-1 hours'),'funnel-link','US','mobile')` });
+    for (let i = 0; i < 3; i++) statements.push({ sql: `INSERT INTO tr_conversions(click_id,network,event,payout_minor,currency,status_mapped,txid,ts_received) VALUES('fa-${i}','testnet','lead',0,'USD','approved','FL${i}',datetime('now'))` });
+    statements.push({ sql: "INSERT INTO tr_conversions(click_id,network,event,payout_minor,currency,status_mapped,txid,ts_received) VALUES('fa-0','testnet','sale',900,'USD','approved','FS0',datetime('now'))" });
+    await worker.local.db.batch(statements);
+    await page.goto(worker.base + '/admin/tracking/?view=funnels');
+    await expect(page.getByText('Conversion funnels')).toBeVisible();
+    await expect(page.getByText('Chain for testnet: clicks → Lead → Sale.')).toBeVisible();
+    await expect(page.getByText('funnel-link')).toBeVisible();
+    await expect(page.getByText('75% of previous step')).toBeVisible();
+    await expect(page.getByText('33.3% of previous step')).toBeVisible();
+  } finally { await context.close(); await worker.dispose(); }
+});
+
+test('G25 admin: profit table renders per-currency rows and an em dash where cost data is missing', async ({ browser }) => {
+  test.setTimeout(120_000);
+  const fixture = accessFixture();
+  const worker = await testWorker({ ADS_ENABLED: '0', CF_ACCESS_TEAM_DOMAIN: fixture.team, CF_ACCESS_AUD: fixture.aud }, 8790, { [fixture.certUrl]: { body: { keys: [fixture.jwk] } } });
+  const context = await browser.newContext({ viewport: { width: 360, height: 800 }, extraHTTPHeaders: fixture.headers('owner@example.test') });
+  const page = await context.newPage();
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    await worker.local.db.batch([
+      { sql: "INSERT INTO admin_users(email,role) VALUES('owner@example.test','owner')" },
+      { sql: `INSERT INTO tr_click_daily(day,slug,country,device_type,dest_host,currency,clicks,conversions,revenue_minor) VALUES('${today}','profit-link','','','','USD',0,1,75)` },
+    ]);
+    await page.goto(worker.base + '/admin/tracking/?view=charts');
+    await expect(page.getByText('Profit & ROI')).toBeVisible();
+    const row = page.locator('tr', { hasText: 'profit-link' });
+    await expect(row).toContainText('USD 0.75');
+    await expect(row).toContainText('—'); // no cost data: em dash, never 0
+  } finally { await context.close(); await worker.dispose(); }
+});
+
+test('G26 admin: a two-day-dead destination is badged in Links and in the Tracking health strip', async ({ browser }) => {
+  test.setTimeout(120_000);
+  const fixture = accessFixture();
+  const worker = await testWorker({ ADS_ENABLED: '0', CF_ACCESS_TEAM_DOMAIN: fixture.team, CF_ACCESS_AUD: fixture.aud }, 8790, { [fixture.certUrl]: { body: { keys: [fixture.jwk] } } });
+  const context = await browser.newContext({ viewport: { width: 360, height: 800 }, extraHTTPHeaders: fixture.headers('owner@example.test') });
+  const page = await context.newPage();
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    await worker.local.db.batch([
+      { sql: "INSERT INTO admin_users(email,role) VALUES('owner@example.test','owner')" },
+      { sql: "INSERT INTO links(slug,name,destination,type,enabled) VALUES('health-link','Health link','https://fixture.test/gone','other',1)" },
+      { sql: `INSERT INTO tr_link_health(link_slug,url,day,ok,http_status) VALUES('health-link','https://fixture.test/gone','${yesterday}',0,500)` },
+      { sql: `INSERT INTO tr_link_health(link_slug,url,day,ok,http_status) VALUES('health-link','https://fixture.test/gone','${today}',0,500)` },
+    ]);
+    await page.goto(worker.base + '/admin/links/');
+    await expect(page.getByText('Destination dead — health check failing two days running')).toBeVisible();
+    await page.goto(worker.base + '/admin/tracking/');
+    await expect(page.getByText('Link health — dead destinations')).toBeVisible();
+    await expect(page.getByText('health-link')).toBeVisible();
+  } finally { await context.close(); await worker.dispose(); }
+});
