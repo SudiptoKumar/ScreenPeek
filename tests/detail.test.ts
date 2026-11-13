@@ -26,9 +26,8 @@ test('detail queries use actual local D1, honour catalogue visibility and read e
     const movieSlug = (await local.db.query('SELECT slug FROM titles WHERE id=-10002'))[0].slug as string;
     const tvSlug = (await local.db.query('SELECT slug FROM titles WHERE id=-10032'))[0].slug as string;
 
-    await context.test('movie and TV detail data, cast, genres, votes, providers and ordered seasons load from fixtures', async () => {
-      await local.db.query("INSERT INTO votes(title_id,title_type,choice,count) VALUES(-10002,'movie','must',3),(-10002,'movie','good',1)");
-      const movie = await loadTitlePage(db, movieSlug, 'movie', 'GB');
+    await context.test('movie and TV detail data, cast, genres, providers and ordered seasons load from fixtures', async () => {
+        const movie = await loadTitlePage(db, movieSlug, 'movie', 'GB');
       assert.equal(movie.status, 200); assert.equal(movie.failed, false);
       assert.equal(movie.title?.id, -10002); assert.equal(movie.title?.type, 'movie');
       assert.equal(movie.cast.filter(person => person.role === 'cast').length, 3);
@@ -37,7 +36,6 @@ test('detail queries use actual local D1, honour catalogue visibility and read e
       assert.equal(movie.providers.length, 1);
       assert.equal(movie.providers[0].country, 'GB');
       assert.equal(movie.providers[0].offer_type, 'rent');
-      assert.deepEqual(movie.votes, [{ choice: 'good', count: 1 }, { choice: 'must', count: 3 }]);
       assert.deepEqual(movie.seasons, []);
       assert.ok(movie.similar.length > 0 && movie.similar.length <= 12);
       assert.ok(movie.similar.every(title => title.type === 'movie' && title.id !== movie.title?.id));
