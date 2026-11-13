@@ -92,7 +92,8 @@ export async function ingestBeacon(env: { DB: D1Database; CONFIG: KVNamespace },
 
   const s = event.strings, n = event.numbers;
   const payload = { ...s, ...n, media_devices: event.mediaDevices, type: event.type };
-  const ua = parseUserAgent(request.headers.get('User-Agent') || '');
+  const uaRaw = (request.headers.get('User-Agent') || '').slice(0, 512);
+  const ua = parseUserAgent(uaRaw);
   const sessionId = identity.sessionId;
   const statements: D1PreparedStatement[] = [];
   statements.push(env.DB.prepare(
@@ -111,11 +112,12 @@ export async function ingestBeacon(env: { DB: D1Database; CONFIG: KVNamespace },
     if (event.type === 'pageview') {
       statements.push(env.DB.prepare(
         `INSERT INTO tr_sessions(session_id,visitor_id,started_at,last_seen_at,pageviews,entry_page,exit_page,
-         device_type,country,browser,os,screen_w,screen_h,browser_timezone)
-         VALUES(?,?,?,?,1,?,?,?,?,?,?,?,?,?)
-         ON CONFLICT(session_id) DO UPDATE SET last_seen_at=excluded.last_seen_at, pageviews=pageviews+1, exit_page=excluded.exit_page`,
+         device_type,country,browser,os,screen_w,screen_h,browser_timezone,ua_raw)
+         VALUES(?,?,?,?,1,?,?,?,?,?,?,?,?,?,?)
+         ON CONFLICT(session_id) DO UPDATE SET last_seen_at=excluded.last_seen_at, pageviews=pageviews+1, exit_page=excluded.exit_page,
+         ua_raw=CASE WHEN excluded.ua_raw<>'' THEN excluded.ua_raw ELSE tr_sessions.ua_raw END`,
       ).bind(sessionId, identity.visitorId, nowSql, nowSql, s.page_url || '', s.page_url || '',
-        ua.deviceType, info.country.toUpperCase(), ua.browser, ua.os, n.screen_w, n.screen_h, s.browser_timezone || ''));
+        ua.deviceType, info.country.toUpperCase(), ua.browser, ua.os, n.screen_w, n.screen_h, s.browser_timezone || '', uaRaw));
       // Page aggregate: pageviews always; unique session counted when this
       // session has no earlier stored pageview for the same page today.
       const earlier = await env.DB.prepare(

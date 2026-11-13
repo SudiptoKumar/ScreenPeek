@@ -60,7 +60,7 @@ test('G7.1/G7.2/G7.5 valid batch stores events + session; garbage stores nothing
   const { state, local, env } = await beaconEnv();
   try {
     const pageview = { ...vectors.beacon_payloads.valid_pageview };
-    const first = await ingestBeacon(env, post(pageview, { Cookie: 'sp_vid=v1; sp_sid=s1' }));
+    const first = await ingestBeacon(env, post(pageview, { Cookie: 'sp_vid=v1; sp_sid=s1', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0' }));
     assert.equal(first.status, 204);
     await ingestBeacon(env, post({ type: 'scroll', scroll_pct: 100 }, { Cookie: 'sp_vid=v1; sp_sid=s1' }));
     await ingestBeacon(env, post({ type: 'exit', duration_s: 42, max_scroll_pct: 100 }, { Cookie: 'sp_vid=v1; sp_sid=s1' }));
@@ -74,7 +74,10 @@ test('G7.1/G7.2/G7.5 valid batch stores events + session; garbage stores nothing
     const pageviewRow = await local.db.query<{ screen_w: number; browser_timezone: string }>('SELECT screen_w, browser_timezone FROM tr_events WHERE event_type=\'pageview\'');
     assert.equal(pageviewRow[0].screen_w, 412);
     assert.equal(pageviewRow[0].browser_timezone, 'Asia/Dhaka');
-    const session = await local.db.query<{ pageviews: number; max_scroll_pct: number; total_duration_s: number }>('SELECT pageviews, max_scroll_pct, total_duration_s FROM tr_sessions WHERE session_id=\'s1\'');
+    const session = await local.db.query<{ pageviews: number; max_scroll_pct: number; total_duration_s: number; ua_raw: string; browser: string }>('SELECT pageviews, max_scroll_pct, total_duration_s, ua_raw, browser FROM tr_sessions WHERE session_id=\'s1\'');
+    // Migration 014: the full raw user-agent line is stored on the session, not only its parsed form.
+    assert.equal(session[0].ua_raw, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0');
+    assert.equal(session[0].browser, 'Firefox');
     assert.equal(session[0].pageviews, 1);
     assert.equal(session[0].max_scroll_pct, 100);
     assert.equal(session[0].total_duration_s, 42);
