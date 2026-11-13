@@ -4,7 +4,7 @@ import { requestAds } from '../lib/ads';
 import type { AdPage } from '../lib/ads';
 interface Props {
   pageType: AdPage;
-  placement: 'top_300x250' | 'top_300x250_b' | 'top_300x250_c' | 'sticky_320x50' | 'native' | 'native_b' | 'native_c' | 'infeed' | 'infeed_b' | 'infeed_c' | 'social_bar' | 'inpage_push' | 'interstitial' | 'push_notifications';
+  placement: 'top_300x250' | 'top_300x250_b' | 'top_300x250_c' | 'lower_300x250' | 'lower_300x250_b' | 'lower_300x250_c' | 'sticky_320x50' | 'native' | 'native_b' | 'native_c' | 'infeed' | 'infeed_b' | 'infeed_c' | 'social_bar' | 'inpage_push' | 'inpage_push_b' | 'interstitial' | 'push_notifications';
   // bare: a stacked partner unit — renders nothing at all unless filled,
   // so an unused partner never leaves an empty placeholder box.
   bare?: boolean;
@@ -12,7 +12,7 @@ interface Props {
 const { placement, pageType, bare = false } = Astro.props;
 const basePlacement = placement.replace(/_[bc]$/, '');
 const dimensions: Record<string, [number, number]> = {
-  top_300x250: [300, 250], sticky_320x50: [320, 50],
+  top_300x250: [300, 250], lower_300x250: [300, 250], sticky_320x50: [320, 50],
   native: [300, 250], infeed: [300, 250], social_bar: [0, 0],
   inpage_push: [0, 0], interstitial: [0, 0], push_notifications: [0, 0],
 };

@@ -2,18 +2,22 @@
 // plus its `_b` and `_c` partners, so different ad networks can run in
 // the same area (the extras render only when filled — no empty boxes).
 // Stacking stops at three on purpose: more units slow the page and
-// collapse click rates. There is deliberately NO second popunder
-// placement: one popunder per visit, from one network, is the rule
-// every network's terms and rates depend on.
+// collapse click rates. Areas per page were doubled on 2026-11-14 at the
+// owner's request — home carries one dedicated area below each content
+// section; the networks set no per-page cap for banner/native units, so
+// the binding limits are the ones below. There is deliberately NO second
+// popunder placement: one popunder per visit, from one network, is the
+// rule every network's terms and rates depend on. Global formats render
+// once per page (inpage_push may stack ONE partner, inpage_push_b).
 export const adMap = {
-  home: ['top_300x250', 'top_300x250_b', 'top_300x250_c', 'native', 'native_b', 'native_c', 'sticky_320x50'],
-  list: ['native', 'native_b', 'native_c', 'infeed', 'infeed_b', 'infeed_c', 'sticky_320x50'],
-  detail: ['top_300x250', 'top_300x250_b', 'top_300x250_c', 'native', 'native_b', 'native_c', 'sticky_320x50', 'popunder'],
+  home: ['top_300x250', 'top_300x250_b', 'top_300x250_c', 'native', 'native_b', 'native_c', 'infeed', 'infeed_b', 'infeed_c', 'lower_300x250', 'lower_300x250_b', 'lower_300x250_c', 'sticky_320x50'],
+  list: ['top_300x250', 'top_300x250_b', 'top_300x250_c', 'native', 'native_b', 'native_c', 'infeed', 'infeed_b', 'infeed_c', 'sticky_320x50'],
+  detail: ['top_300x250', 'top_300x250_b', 'top_300x250_c', 'native', 'native_b', 'native_c', 'infeed', 'infeed_b', 'infeed_c', 'lower_300x250', 'lower_300x250_b', 'lower_300x250_c', 'sticky_320x50', 'popunder'],
   cast: ['top_300x250', 'top_300x250_b', 'top_300x250_c', 'native', 'native_b', 'native_c', 'sticky_320x50'],
-  watch: ['top_300x250', 'top_300x250_b', 'top_300x250_c', 'native', 'native_b', 'native_c', 'sticky_320x50'],
+  watch: ['top_300x250', 'top_300x250_b', 'top_300x250_c', 'native', 'native_b', 'native_c', 'infeed', 'infeed_b', 'infeed_c', 'sticky_320x50'],
   trailer: ['top_300x250', 'top_300x250_b', 'top_300x250_c', 'sticky_320x50'],
   search: ['native', 'native_b', 'native_c', 'sticky_320x50'],
-  global: ['social_bar', 'inpage_push', 'interstitial', 'push_notifications'],
+  global: ['social_bar', 'inpage_push', 'inpage_push_b', 'interstitial', 'push_notifications'],
 } as const;
 export type AdPage = keyof typeof adMap;
 export type AdPlacement = typeof adMap[AdPage][number];

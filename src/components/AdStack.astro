@@ -7,7 +7,7 @@ import type { AdPage } from '../lib/ads';
 // a code is saved for them, so an unused partner never shows a box.
 interface Props {
   pageType: AdPage;
-  placement: 'top_300x250' | 'native' | 'infeed';
+  placement: 'top_300x250' | 'native' | 'infeed' | 'lower_300x250';
 }
 const { pageType, placement } = Astro.props;
 const partnerB = `${placement}_b` as const;

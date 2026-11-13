@@ -71,6 +71,17 @@ third-party font requests anywhere.
 - **Fact rows** (`.fact-rows`, `.ledger`): label left in muted, value right,
   semibold, tabular; hairline between rows. This is the standard way to show
   data on both the site and the panel.
+- **Ad areas** (owner rules, 2026-11-14): every in-flow area is a stack of up
+  to three units from different networks (base + `_b` + `_c` partners;
+  partners render only when filled). The home page carries one dedicated
+  area directly below each content section (Trending Movies → 300×250 stack,
+  Trending Series → native stack, provider shelves → infeed stack, Genres →
+  lower 300×250 stack); detail carries four areas; every ad type must be
+  visible within the first two pages of the journey. Exactly one popunder
+  per visit (detail page only), one sticky bar, and each global format once
+  (in-page push may stack one partner). Networks set no per-page cap for
+  banner/native units; the stack-of-three and one-popunder limits are ours
+  and are not to be exceeded.
 - **Trailer**: the detail page shows a 16:9 facade (own image, play badge)
   linking to the trailer page; the trailer page shows the same facade with a
   red play disc and loads the YouTube iframe only on click. No iframe and no

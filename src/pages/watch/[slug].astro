@@ -29,7 +29,8 @@ const groups = [{ name: 'Stream', values: ['stream'] }, { name: 'Free', values: 
       return rows.length > 0 && <section><h2>{group.name}</h2><ul>{rows.map(provider => <li><ProviderRow provider={provider} mediaBase={env.R2_PUBLIC_BASE} /></li>)}</ul></section>;
     })}</div> : <section class="empty-state"><h2>Not available to stream in {name} yet.</h2><p>Availability can change. Check another country below.</p></section>}
     <p class="provider-credit">Streaming data by JustWatch.</p>
+    <AdStack pageType="watch" placement="top_300x250" />
     {data.availableCountries.length > 0 && <p class="available-countries">Available in: {data.availableCountries.map(country => <a href={`?country=${country}`}>{countryNames[country]}</a>)}</p>}
-    <AdStack pageType="watch" placement="top_300x250" /><AdStack pageType="watch" placement="native" />
+    <AdStack pageType="watch" placement="native" /><AdStack pageType="watch" placement="infeed" />
   </article>}
 </Base>

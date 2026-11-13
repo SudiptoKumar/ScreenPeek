@@ -1,0 +1,121 @@
+name: Ads expansion apply (manual)
+
+# Owner-requested 2026-11-14: double the ad areas per page and wire
+# HilltopAds in as the second network.
+#   - New base slots copy the network code already live in their sibling
+#     slot (read from D1 at run time — no code text is duplicated here
+#     except the two HilltopAds tags below, which exist only in the
+#     HilltopAds panel).
+#   - home/top_300x250_b  <- HilltopAds "SP 300x250" (zone 7624129)
+#   - global/inpage_push_b <- HilltopAds "SP InPage Push" (zone 7624145)
+# Every written row is mirrored to its `ad:<page>:<placement>` KV key,
+# exactly as the admin panel's propagation does, then read back from
+# both stores. A go-live rebuild afterwards bakes the slots into the
+# static pages. HilltopAds rotates tag tokens when its code dialog is
+# reopened; if a HilltopAds unit ever stops loading, fetch a fresh code
+# from the panel, update the two constants below, and re-run.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    if: vars.SCREENPEEK_SYNC_ENABLED == '1' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+      KV_NAMESPACE_ID: ${{ secrets.KV_NAMESPACE_ID }}
+    steps:
+      - name: Apply ad slot expansion in D1 and KV mirrors
+        run: |
+          python3 - <<'PYEOF'
+          import json, os, urllib.request, urllib.error, urllib.parse
+
+          acct = os.environ['CLOUDFLARE_ACCOUNT_ID']; token = os.environ['CLOUDFLARE_API_TOKEN']
+          d1 = f"https://api.cloudflare.com/client/v4/accounts/{acct}/d1/database/{os.environ['D1_DATABASE_ID']}/query"
+          kv_base = f"https://api.cloudflare.com/client/v4/accounts/{acct}/storage/kv/namespaces/{os.environ['KV_NAMESPACE_ID']}/values"
+
+          HILLTOP_BANNER = """<script>
+          (function(ewbkhd){
+          var d = document,
+              s = d.createElement('script'),
+              l = d.currentScript || d.scripts[d.scripts.length - 1];
+          s.settings = ewbkhd || {};
+          s.src = "\\/\\/massivesalad.com\\/b.XLVYs\\/dRGflD0xYoWEc_\\/QehmI9xusZmUslgkwPZTMcL2ZMwj\\/QexOMOjtk-tCNnzPY\\/yTNLDaEjzPMPwN";
+          s.async = true;
+          s.referrerPolicy = 'no-referrer-when-downgrade';
+          l.parentNode.insertBefore(s, l);
+          })({})
+          </script>"""
+
+          HILLTOP_IPP = """<script>
+          (function(ewbkhd){
+          var d = document,
+              s = d.createElement('script'),
+              l = d.currentScript || d.scripts[d.scripts.length - 1];
+          s.settings = ewbkhd || {};
+          s.src = "\\/\\/massivesalad.com\\/biX.VTsmd\\/GMls0SYRWxcK\\/De\\/mW9wukZRUqlQkLPKTzcP2jMcjEQ\\/x\\/NjDUUytpN-zgY\\/yeNLDcE\\/0KO\\/QJ";
+          s.async = true;
+          s.referrerPolicy = 'no-referrer-when-downgrade';
+          l.parentNode.insertBefore(s, l);
+          })({})
+          </script>"""
+
+          def call(method, url, body=None, content_type='application/json'):
+              data = body
+              if body is not None and content_type == 'application/json':
+                  data = json.dumps(body).encode()
+              r = urllib.request.Request(url, data=data, method=method)
+              r.add_header('Authorization', 'Bearer ' + token); r.add_header('Content-Type', content_type)
+              try:
+                  with urllib.request.urlopen(r) as resp: return resp.status, resp.read().decode('utf-8', 'replace')
+              except urllib.error.HTTPError as e:
+                  return e.code, e.read().decode('utf-8', 'replace')[:300]
+
+          def query(sql, params=None):
+              status, text = call('POST', d1, {'sql': sql, 'params': params or []})
+              if status != 200:
+                  raise SystemExit(f'D1 query failed ({status}): {text}')
+              return json.loads(text)['result'][0]['results']
+
+          def source_code(page, placement):
+              rows = query('SELECT code FROM ad_slots WHERE page_type=? AND placement=?', [page, placement])
+              code = rows[0]['code'] if rows else ''
+              if not code or not code.strip():
+                  raise SystemExit(f'Source slot {page}/{placement} is empty — refusing to copy an empty code.')
+              return code
+
+          banner = source_code('home', 'top_300x250')
+          home_native = source_code('home', 'native')
+          detail_banner = source_code('detail', 'top_300x250')
+          detail_native = source_code('detail', 'native')
+          watch_native = source_code('watch', 'native')
+          print('source codes read: banner/home_native/detail_banner/detail_native/watch_native all non-empty')
+
+          rows = [
+              ('home', 'top_300x250_b', HILLTOP_BANNER),
+              ('home', 'infeed', home_native), ('home', 'infeed_b', ''), ('home', 'infeed_c', ''),
+              ('home', 'lower_300x250', banner), ('home', 'lower_300x250_b', ''), ('home', 'lower_300x250_c', ''),
+              ('detail', 'infeed', detail_native), ('detail', 'infeed_b', ''), ('detail', 'infeed_c', ''),
+              ('detail', 'lower_300x250', detail_banner), ('detail', 'lower_300x250_b', ''), ('detail', 'lower_300x250_c', ''),
+              ('list', 'top_300x250', banner), ('list', 'top_300x250_b', ''), ('list', 'top_300x250_c', ''),
+              ('watch', 'infeed', watch_native), ('watch', 'infeed_b', ''), ('watch', 'infeed_c', ''),
+              ('global', 'inpage_push_b', HILLTOP_IPP),
+          ]
+          for page, placement, code in rows:
+              query('INSERT OR REPLACE INTO ad_slots (page_type, placement, code, enabled) VALUES (?, ?, ?, 1)', [page, placement, code])
+              back = query('SELECT page_type,placement,code,enabled,starts_at,ends_at,test_mode,deleted_at FROM ad_slots WHERE page_type=? AND placement=?', [page, placement])[0]
+              kv_key = urllib.parse.quote(f'ad:{page}:{placement}', safe='')
+              status, text = call('PUT', f'{kv_base}/{kv_key}', body=json.dumps(back).encode(), content_type='text/plain')
+              if status not in (200, 201):
+                  raise SystemExit(f'KV mirror failed for {page}/{placement} ({status}): {text}')
+              tag = 'hilltopads' if 'massivesalad' in back['code'] else ('filled' if back['code'].strip() else 'empty-partner')
+              print(f"{page}/{placement}: d1 ok, kv mirror {status}, code {len(back['code'])} chars [{tag}]")
+          print(f'ads expansion applied: {len(rows)} slot rows written and mirrored')
+          PYEOF
