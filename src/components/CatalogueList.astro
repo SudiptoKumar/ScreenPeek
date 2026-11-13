@@ -17,7 +17,7 @@ const { type, label, filters, catalogue, options, sample, failed, missing, filte
   sample={sample} noindex={sample || filtered || failed || missing} pageType={failed || missing ? 'utility' : 'list'} pageNumber={catalogue.page} schemas={failed || missing ? [] : [itemListSchema(catalogue.titles, siteOrigin(env.SITE_URL), catalogue.page)]}>
   {failed ? <section class="empty-state"><p class="eyebrow">CATALOGUE</p><h1>The catalogue is temporarily unavailable.</h1><p>Please try again shortly.</p><a class="button" href="/">Go home</a></section> : missing ?
     <section class="empty-state"><p class="eyebrow">404 · PAGE NOT FOUND</p><h1>That page is beyond the catalogue.</h1><p>There {catalogue.pages === 1 ? 'is 1 page' : `are ${catalogue.pages} pages`} of matching titles.</p><a class="button primary" href={base}>Back to {label.toLowerCase()}</a></section> : <>
-    <header class="page-heading"><a class="back-link" href="/">← Home</a><h1>{label}</h1><p>Find a story that fits. Filter the catalogue below.</p></header>
+    <header class="page-heading"><a class="back-link" href="/">← Home</a><h1>{label}</h1></header>
     <form class="catalogue-filters" action={`${base}filter/`} method="get" aria-label="Catalogue filters">
       <label for="filter-genre">Genre<select id="filter-genre" name="genre"><option value="">All genres</option>{options.genres.map(genre => <option value={genre.slug} selected={filters.genre === genre.slug}>{genre.name}</option>)}</select></label>
       <label for="filter-year">Year<select id="filter-year" name="year"><option value="">Any year</option>{options.years.map(year => <option value={year} selected={filters.year === year}>{year}</option>)}</select></label>

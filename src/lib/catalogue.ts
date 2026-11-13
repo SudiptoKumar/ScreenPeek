@@ -117,6 +117,10 @@ export async function topRatedTitles(db: D1Database, includeUngated = false, lim
   return { movies, series };
 }
 
+export const genreTileColors: Record<string, string> = { drama: '#6d4bd8', animation: '#d6336c', crime: '#0e7c86', comedy: '#c77400', action: '#d92f35', 'science-fiction': '#2470c9', horror: '#8e2434', thriller: '#345995', romance: '#c2437e', fantasy: '#5b5bd6', mystery: '#4a5568', adventure: '#1f7a4d', family: '#8a6d1f', history: '#7c5a2e', war: '#5a4632', western: '#9a6a33', music: '#7d3c98', documentary: '#3d6e63', 'tv-movie': '#546e7a' };
+export const genreTileFallback = ['#3d5a80', '#6a4c93', '#2a9d8f', '#bc6c25', '#9d4edd'];
+export const genreTileColor = (slug: string, index = 0) => genreTileColors[slug] ?? genreTileFallback[index % genreTileFallback.length];
+
 export function titleUrl(title: Pick<TitleCard, 'type' | 'slug'>) {
   return `/${title.type === 'movie' ? 'movie' : 'tv'}/${encodeURIComponent(title.slug)}/`;
 }

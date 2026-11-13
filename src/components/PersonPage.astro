@@ -25,7 +25,7 @@ const initials = person?.name.split(/\s+/).slice(0, 2).map(part => part[0]).join
     <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a><span aria-hidden="true">/</span><span>Cast & crew</span><span aria-hidden="true">/</span><span aria-current="page">{person.name}</span></nav>
     <header class="person-hero"><div class="person-portrait">{portrait ? <img src={portrait} width="185" height="278" loading="eager" fetchpriority="high" decoding="async" alt={`${person.name} portrait`} /> :
       <div class="person-placeholder" role="img" aria-label={`${person.name} portrait unavailable`}><span aria-hidden="true">{initials}</span><small>Portrait unavailable</small></div>}</div>
-      <div class="person-heading"><p class="eyebrow">CAST & CREW</p><h1>{person.name}</h1><p>{data.total.toLocaleString('en')} {data.total === 1 ? 'title' : 'titles'} in the catalogue</p></div>
+      <div class="person-heading"><h1>{person.name}</h1><p>{data.total.toLocaleString('en')} {data.total === 1 ? 'title' : 'titles'} in the catalogue</p></div>
     </header>
     <section class="catalogue-section storyline" aria-labelledby="biography-title"><h2 id="biography-title">Biography</h2>{biography ? <><p>{biography.slice(0, cutoff)}</p>{cutoff < biography.length && <details><summary>Read more</summary><p>{biography.slice(cutoff).trim()}</p></details>}</> : <p>A biography is not available yet.</p>}</section>
     <AdStack pageType="cast" placement="top_300x250" />

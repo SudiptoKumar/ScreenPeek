@@ -5,7 +5,7 @@ import Base from '../layouts/Base.astro';
 import AdStack from '../components/AdStack.astro';
 import PosterCard from '../components/PosterCard.astro';
 import { env } from 'cloudflare:workers';
-import { sampleMode, homeTitles, titleUrl } from '../lib/catalogue';
+import { sampleMode, homeTitles, titleUrl, genreTileColor } from '../lib/catalogue';
 import { mediaUrl } from '../lib/media';
 import { itemListSchema, siteOrigin } from '../lib/seo';
 let sample = false, failed = false;
@@ -20,8 +20,6 @@ const heroVotes = hero?.vote_count ? new Intl.NumberFormat('en', { notation: 'co
 const trendingSection = sections.find(section => section.key === 'trending');
 const splitMovies = trendingSection?.source === 'manual' ? catalogue.trending.filter(title => title.type === 'movie') : catalogue.trendingMovies;
 const splitSeries = trendingSection?.source === 'manual' ? catalogue.trending.filter(title => title.type === 'tv') : catalogue.trendingSeries;
-const genreColors: Record<string, string> = { drama: '#6d4bd8', animation: '#d6336c', crime: '#0e7c86', comedy: '#c77400', action: '#d92f35', 'science-fiction': '#2470c9', horror: '#8e2434', thriller: '#345995', romance: '#c2437e', fantasy: '#5b5bd6', mystery: '#4a5568', adventure: '#1f7a4d', family: '#8a6d1f', history: '#7c5a2e', war: '#5a4632', western: '#9a6a33', music: '#7d3c98', documentary: '#3d6e63', 'tv-movie': '#546e7a' };
-const genreFallback = ['#3d5a80', '#6a4c93', '#2a9d8f', '#bc6c25', '#9d4edd'];
 const soonTag = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }).toUpperCase();
 const soonFull = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
 ---
@@ -65,7 +63,7 @@ const soonFull = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString('e
       <div class="poster-row">{catalogue.upcoming.map(title => { const img = mediaUrl(title.poster_r2, env.R2_PUBLIC_BASE, 185); return <a class="soon-card" href={titleUrl(title)}><span class="sp">{img && <><img data-lazy-src={img} width="185" height="278" alt={`${title.title} poster`} loading="lazy" decoding="async" /><noscript><img src={img} width="185" height="278" alt={`${title.title} poster`} loading="lazy" decoding="async" /></noscript></>}<span class="fade"></span>{title.release_date && <span class="when">{soonTag(title.release_date)}</span>}<span class="cap"><b>{title.title}</b><span>{title.release_date ? soonFull(title.release_date) : 'Date TBA'}</span></span></span></a>; })}</div>
     </section>}</>}
 {section.key === 'genres' && <>{catalogue.genres.length > 0 && <section class="shelf" aria-labelledby="genres-title"><div class="shelf-head"><h2 id="genres-title">Browse by Genre</h2><a class="seeall" href="/genres/">All genres</a></div>
-      <div class="genres">{catalogue.genres.slice(0, 12).map((genre, i) => <a class="genre" style={`--g:${genreColors[genre.slug] ?? genreFallback[i % genreFallback.length]}`} href={`/genre/${genre.slug}/`}><b>{genre.name}</b><span>{genre.title_count} titles</span></a>)}</div>
+      <div class="genres">{catalogue.genres.slice(0, 12).map((genre, i) => <a class="genre" style={`--g:${genreTileColor(genre.slug, i)}`} href={`/genre/${genre.slug}/`}><b>{genre.name}</b><span>{genre.title_count} titles</span></a>)}</div>
     </section>}</>}
 </>)}
 {!sections.some(section => section.key === 'trending') && <><AdStack pageType="home" placement="top_300x250" /><AdStack pageType="home" placement="native" /></>}

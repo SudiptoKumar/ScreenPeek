@@ -21,7 +21,7 @@ const ratings = [...new Set([6, 7, 8, 9, ...(filters.minRating === undefined ? [
 <Base title={pageTitle} description="Search the movie and TV catalogue by title, genre, year and TMDb rating."
   sample={data.sample} noindex={true} pageType={available ? 'search' : 'utility'} schemas={available && catalogue.titles.length ? [itemListSchema(catalogue.titles, siteOrigin(env.SITE_URL), catalogue.page)] : []}>
   <article data-search-page>
-    <header class="page-heading"><a class="back-link" href="/">← Home</a><h1>Search movies & series</h1><p>Find a title, then explore its story, cast and watch options.</p></header>
+    <header class="page-heading"><a class="back-link" href="/">← Home</a><h1>Search movies & series</h1></header>
     <form class="catalogue-filters search-filters" action="/search/" method="get" aria-label="Search filters">
       <label class="search-query-field" for="query">Search titles<input id="query" name="q" type="search" value={data.query} placeholder="Movie or series title" maxlength="100" minlength="2" /></label>
       <label for="search-type">Type<select id="search-type" name="type"><option value="">Movies & series</option><option value="movie" selected={filters.type === 'movie'}>Movies</option><option value="tv" selected={filters.type === 'tv'}>Series</option></select></label>

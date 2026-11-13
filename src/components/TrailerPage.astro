@@ -23,11 +23,11 @@ const overview = title?.overview?.trim() || '';
   sample={data.sample} noindex={data.noindex} pageType={available ? 'trailer' : 'utility'} schemas={trailerSchema(data, siteOrigin(env.SITE_URL), mediaBase)} ogImage={available ? poster : null}>
   {!available || !title ? <section class="empty-state"><p class="eyebrow">{data.status === 503 ? 'CATALOGUE' : `${data.status} · ${data.status === 410 ? 'REMOVED' : 'NOT FOUND'}`}</p><h1>{errorHeading}</h1><p>{data.status === 503 ? 'Please try again shortly.' : 'Explore the catalogue to find another movie or series.'}</p><a class="button primary" href="/">Go home</a></section> : <article data-trailer-page>
     <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a><span aria-hidden="true">/</span><a href={title.type === 'tv' ? '/series/' : '/movies/'}>{title.type === 'tv' ? 'Series' : 'Movies'}</a><span aria-hidden="true">/</span><a href={detailUrl}>{title.title}</a><span aria-hidden="true">/</span><span aria-current="page">Trailer</span></nav>
-    <header class="page-heading"><p class="eyebrow">TRAILER</p><h1>{title.title} trailer</h1><p>{title.year ?? 'Year TBA'} · {title.type === 'tv' ? 'TV series' : 'Movie'}</p></header>
+    <header class="page-heading"><h1>{title.title} trailer</h1><p>{title.year ?? 'Year TBA'} · {title.type === 'tv' ? 'TV series' : 'Movie'}</p></header>
     {key ? <>
-      <div class:list={['trailer-facade', { 'has-poster': Boolean(poster) }]} data-trailer-facade data-trailer-key={key}>
-        {poster && <img src={poster} width="185" height="278" loading="eager" fetchpriority="high" decoding="async" alt={`${title.title} poster`} />}
-        <div class="trailer-facade-copy"><span class="eyebrow">YOUTUBE</span><a class="button primary" data-load-trailer data-trailer-title={`${title.title} trailer from YouTube`} href={`https://www.youtube.com/watch?v=${encodeURIComponent(key)}`} target="_blank" rel="noopener noreferrer">Load trailer from YouTube</a><small>Loads an external video when selected.</small></div>
+      <div class="trailer-player" data-trailer-facade data-trailer-key={key}>
+        {poster && <img class="trailer-bg" src={poster} width="185" height="278" loading="eager" fetchpriority="high" decoding="async" alt="" />}
+        <div class="trailer-facade-copy"><a class="trailer-load" data-load-trailer data-trailer-title={`${title.title} trailer from YouTube`} href={`https://www.youtube.com/watch?v=${encodeURIComponent(key)}`} target="_blank" rel="noopener noreferrer"><span class="trailer-disc" aria-hidden="true"><svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg></span><span>Load trailer from YouTube</span></a><small>Loads an external video when selected.</small></div>
       </div>
       <script is:inline>
         document.querySelectorAll('[data-trailer-facade]').forEach(f=>{
