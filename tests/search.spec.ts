@@ -9,6 +9,7 @@ test('header suggestions are bounded, keyboard accessible, and use the owned sea
   await page.goto('/');
   expect(queries).toEqual([]);
   const input = page.locator('#search');
+  await page.getByRole('button', { name: 'Open search' }).click();
   await input.fill('Sample');
   const results = page.getByRole('listbox');
   await expect(results).toBeVisible();
