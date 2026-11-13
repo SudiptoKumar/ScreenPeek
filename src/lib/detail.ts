@@ -29,19 +29,17 @@ export async function loadTitlePage(db: D1Database, slug: string, type: 'movie' 
   let title: TitleDetail | null = null;
   let cast: CastMember[] = [], providers: WatchProvider[] = [], seasons: SeasonInfo[] = [], similar: TitleCard[] = [];
   let genres: Array<{ slug: string; name: string }> = [];
-  let votes: Array<{ choice: 'must' | 'good' | 'average' | 'skip'; count: number }> = [];
   let external: ExternalRatings | null = null;
   try {
     sample = await sampleMode(db);
     title = await db.prepare('SELECT * FROM titles WHERE slug=? AND type=?').bind(slug, type).first<TitleDetail>();
     if (title && !title.deleted && !title.deleted_at && !title.hidden) {
-      [cast, providers, seasons, votes] = await Promise.all([
+      [cast, providers, seasons] = await Promise.all([
         db.prepare(`SELECT p.id,p.slug,p.name,p.profile_r2,c.role,c.character,c.ord
           FROM credits c JOIN people p ON p.id=c.person_id
           WHERE c.title_id=? AND c.title_type=? AND p.deleted_at IS NULL ORDER BY c.ord,p.name`).bind(title.id, type).all<CastMember>().then(result => result.results),
         db.prepare('SELECT country,provider_id,provider_name,logo_r2,offer_type FROM providers WHERE title_id=? AND title_type=? AND country=? ORDER BY provider_name').bind(title.id, type, launchCountry(country)).all<WatchProvider>().then(result => result.results),
         type === 'tv' ? db.prepare('SELECT season_number,name,episode_count,air_date FROM seasons WHERE title_id=? ORDER BY season_number').bind(title.id).all<SeasonInfo>().then(result => result.results) : Promise.resolve([]),
-        db.prepare('SELECT choice,count FROM votes WHERE title_id=? AND title_type=? ORDER BY choice').bind(title.id, type).all<typeof votes[number]>().then(result => result.results),
       ]);
       const slugs = parseJsonArray<string>(title.genres).filter(value => typeof value === 'string').slice(0, 20);
       if (slugs.length) genres = (await db.prepare(`SELECT slug,name FROM genres WHERE slug IN (${slugs.map(() => '?').join(',')}) ORDER BY name`).bind(...slugs).all<{ slug: string; name: string }>()).results;
@@ -54,7 +52,7 @@ export async function loadTitlePage(db: D1Database, slug: string, type: 'movie' 
   } catch { failed = true; }
   const status = failed ? 503 : !title ? 404 : title.deleted ? 410 : title.hidden || title.deleted_at ? 404 : 200;
   return {
-    title, cast, providers, seasons, votes, genres, similar, external, sample, failed, status,
+    title, cast, providers, seasons, genres, similar, external, sample, failed, status,
     noindex: sample || status !== 200 || !title?.quality_gate,
     country: launchCountry(country),
     cacheControl: sample || status !== 200 ? 'no-store' : 'public, s-maxage=86400, stale-while-revalidate=604800',

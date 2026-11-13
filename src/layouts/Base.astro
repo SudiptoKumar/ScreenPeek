@@ -120,7 +120,7 @@ if (pageType !== 'utility' && Astro.url.pathname !== '/' && !structured.some(sch
       <nav aria-label="Information"><a href="/about/">About</a><a href="/privacy/">Privacy</a><a href="/dmca/">DMCA</a><a href="/contact/">Contact</a></nav>
       {site.socials.length > 0 && <nav aria-label="Social links">{site.socials.map(link => <a href={`/go/${link.slug}/`} rel="sponsored nofollow noopener" target="_blank" data-no-popunder>{link.name}</a>)}</nav>}
       {site.tagline && <p>{site.tagline}</p>}
-      <p>{site.name} provides movie and TV information. No videos are hosted here.</p>
+      <p>Every movie. Every show. Take a peek.</p>
     </footer>
     {pageType !== 'utility' && <><AdSlot pageType={pageType} placement="sticky_320x50" /><AdSlot pageType="global" placement="social_bar" /><AdSlot pageType="global" placement="inpage_push" /><AdSlot pageType="global" placement="inpage_push_b" /><AdSlot pageType="global" placement="interstitial" /><AdSlot pageType="global" placement="push_notifications" /></>}
     {pageType === 'detail' && <Popunder />}

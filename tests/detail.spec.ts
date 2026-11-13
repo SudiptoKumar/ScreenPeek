@@ -15,7 +15,6 @@ for (const route of ['/movies/', '/series/']) {
     await expect(page.getByRole('link', { name: /Where to Watch/i }).first()).toHaveAttribute('href', /^\/watch\//);
     await expect(page.getByRole('link', { name: /Trailer/i }).first()).toHaveAttribute('href', /^\/trailer\//);
     await expect(page.getByRole('heading', { name: 'The Story', exact: true })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Community Verdict', exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'More Like This', exact: true })).toBeVisible();
     expect(await page.locator('[data-poster-card]').count()).toBeLessThanOrEqual(12);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

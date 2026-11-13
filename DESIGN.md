@@ -64,7 +64,7 @@ third-party font requests anywhere.
 - **Detail page**: hero (poster, title, rating + votes, year, runtime as
   `2h 37m`, credits line "Directed by … · Starring …", genre chips, actions) →
   The Story → Where to Watch → Top Cast → Trailer card → Box Office (fact
-  rows) → Community Verdict → Seasons (series) → Gallery → Questions & answers
+  rows) → Seasons (series) → Gallery → Questions & answers
   → More Like This. A "Details" sidebar (fact rows + catalogue facts) sits
   beside the main column on wide screens and stacks below on phones. There is
   no Reviews section (owner decision, 2026-11-14).

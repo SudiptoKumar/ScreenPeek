@@ -44,9 +44,7 @@ export async function metadataAction(env:AdminEnvironment,actor:AdminIdentity,fo
  if(Number(form.get('m_revision'))!==Number(current.revision)||form.get('m_updated_at')!==String(current.updated_at))throw new AdminError('The record changed, possibly through sync. Reload before saving.',409);
  const extra:Array<{sql:string;params:Array<string|number|null>}>=[];
  let next:AdminRow={...current},entity=kind,fields:string[]=[];
- if(action==='reset-votes'&&kind==='title'){
-  next.vote_epoch=Number(current.vote_epoch||0)+1;fields=['vote_epoch'];entity='votes';extra.push({sql:'DELETE FROM votes WHERE title_id=? AND title_type=?',params:[id,type]});
- }else if(action==='delete'){
+ if(action==='delete'){
   if(actor.role!=='owner'||form.get('confirm_delete')!=='DELETE')throw new AdminError('Only Owner can permanently delete; type DELETE to confirm.',403);
   const used=await usedIn(env,kind==='person'?'people':'titles',current);
   if(used&&form.get('confirm_used')!=='1')throw new AdminError(`Used in ${used} places. Confirm referenced-item deletion.`);
@@ -77,16 +75,16 @@ export async function metadataAction(env:AdminEnvironment,actor:AdminIdentity,fo
   }
  }else throw new AdminError('Unknown metadata action.');
  next.updated_at=new Date().toISOString();fields.push('updated_at');fields=[...new Set(fields)];
- if(kind==='title'&&action!=='reset-votes'){
+ if(kind==='title'){
   extra.push({sql:'DELETE FROM title_genres WHERE title_id=? AND title_type=?',params:[id,type]},{sql:"INSERT OR IGNORE INTO genres(slug,name) SELECT value,replace(value,'-',' ') FROM json_each(?)",params:[String(next.genres||'[]')]},{sql:"INSERT INTO title_genres(title_id,title_type,genre_slug) SELECT ?,?,value FROM json_each(?)",params:[id,type,String(next.genres||'[]')]});
   extra.push({sql:"INSERT OR IGNORE INTO languages(slug,name) SELECT original_language,original_language FROM titles WHERE id=? AND type=? AND original_language IS NOT NULL AND original_language<>''",params:[id,type]});
   extra.push({sql:"UPDATE titles SET quality_gate=CASE WHEN deleted=0 AND deleted_at IS NULL AND poster_r2 IS NOT NULL AND length(trim(poster_r2))>0 AND length(overview)>=80 AND popularity>=COALESCE((SELECT CAST(value AS REAL) FROM config WHERE key='sync_popularity_gate'),10) AND ((SELECT COUNT(*) FROM credits c JOIN people p ON p.id=c.person_id WHERE c.title_id=titles.id AND c.title_type=titles.type AND c.role='cast' AND p.deleted_at IS NULL)>=3 OR EXISTS(SELECT 1 FROM providers p WHERE p.title_id=titles.id AND p.title_type=titles.type)) THEN 1 ELSE 0 END WHERE id=? AND type=?",params:[id,type]});
   extra.push({sql:'DELETE FROM titles_fts WHERE slug IN (?,?)',params:[String(current.slug),String(next.slug)]},{sql:'INSERT INTO titles_fts(title,slug,year,type) SELECT title,slug,year,type FROM titles WHERE id=? AND type=? AND deleted=0 AND deleted_at IS NULL',params:[id,type]});
  }
  if(kind==='person'&&action==='delete')extra.push({sql:"UPDATE titles SET quality_gate=0 WHERE (id,type) IN(SELECT title_id,title_type FROM credits WHERE person_id=?) AND (SELECT COUNT(*) FROM credits c JOIN people p ON p.id=c.person_id WHERE c.title_id=titles.id AND c.title_type=titles.type AND c.role='cast' AND p.deleted_at IS NULL)<3 AND NOT EXISTS(SELECT 1 FROM providers p WHERE p.title_id=titles.id AND p.title_type=titles.type)",params:[id]});
- if(action!=='reset-votes')for(const [table,relation]of [['genres','SELECT COUNT(*) FROM title_genres g JOIN titles t ON t.id=g.title_id AND t.type=g.title_type WHERE g.genre_slug=genres.slug'],['languages','SELECT COUNT(*) FROM titles t WHERE t.original_language=languages.slug'],['collections','SELECT COUNT(*) FROM collection_titles c JOIN titles t ON t.id=c.title_id AND t.type=c.title_type WHERE c.collection_slug=collections.slug']])extra.push({sql:`UPDATE ${table} SET title_count=(${relation} AND t.hidden=0 AND t.deleted=0 AND t.deleted_at IS NULL)`,params:[]});
+ for(const [table,relation]of [['genres','SELECT COUNT(*) FROM title_genres g JOIN titles t ON t.id=g.title_id AND t.type=g.title_type WHERE g.genre_slug=genres.slug'],['languages','SELECT COUNT(*) FROM titles t WHERE t.original_language=languages.slug'],['collections','SELECT COUNT(*) FROM collection_titles c JOIN titles t ON t.id=c.title_id AND t.type=c.title_type WHERE c.collection_slug=collections.slug']])extra.push({sql:`UPDATE ${table} SET title_count=(${relation} AND t.hidden=0 AND t.deleted=0 AND t.deleted_at IS NULL)`,params:[]});
  const delivery=await commitChange(env.DB,actor,{entity,id:kind==='person'?String(id):`${type}:${id}`,before:current,after:next,sql:`UPDATE ${table} SET ${fields.map(field=>`${field}=?`).join(',')},revision=revision+1 WHERE ${where} AND revision=? AND updated_at=?`,params:[...fields.map(field=>next[field]),...keys,Number(current.revision),String(current.updated_at)],mirrors:[],related:extra});
- return {message:savedMessage(await deliverChange(env,delivery,fetcher))+(action==='reset-votes'?' Aggregate votes reset; daily voting limits still apply.':''),jobUrl:undefined};
+ return {message:savedMessage(await deliverChange(env,delivery,fetcher)),jobUrl:undefined};
 }
 
 export async function undoMetadata(env:AdminEnvironment,actor:AdminIdentity,id:number,fetcher:typeof fetch=fetch){
