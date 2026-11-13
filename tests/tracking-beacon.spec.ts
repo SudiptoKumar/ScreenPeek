@@ -40,7 +40,7 @@ test('G6.2/G6.3/G6.4 (T2 off) + G6.5: pageview fields land, exit records scroll 
   } finally { await context.close(); await worker.dispose(); }
 });
 
-test('G6.4 (T2 on + opt-in): canvas hash and WebGL renderer are collected in Chromium', async ({ browser }) => {
+test('G6.4 (T2 on, owner-loosened 2026-11-13: no opt-in cookie needed): canvas hash and WebGL renderer are collected in Chromium', async ({ browser }) => {
   const worker = await testWorker({ ADS_ENABLED: '0' }, 8790);
   const context = await browser.newContext({ viewport: { width: 360, height: 800 } });
   const page = await context.newPage();
@@ -49,7 +49,6 @@ test('G6.4 (T2 on + opt-in): canvas hash and WebGL renderer are collected in Chr
       { sql: "UPDATE config SET value='1' WHERE key='tracking_enabled'" },
       { sql: "UPDATE config SET value='1' WHERE key='tracking_t2_enabled'" },
     ]);
-    await context.addCookies([{ name: 'sp_consent', value: '1', url: worker.base + '/' }]);
     await page.goto(worker.base + '/');
     const pageview = await waitForEvent(worker, 'pageview');
     expect(pageview).toBeTruthy();

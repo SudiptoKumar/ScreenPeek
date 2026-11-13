@@ -7,9 +7,8 @@ var t0=Date.now(),ck=function(n){var m=document.cookie.match(new RegExp('(?:^|;\
 p=location.pathname,pt='page',tid='',d=p.match(/^\/(movie|tv)\/([^/]+)\//);
 if(p==='/')pt='home';else if(d){pt='detail';tid=d[1]+':'+d[2]}else if(/^\/watch\//.test(p))pt='watch';
 else if(/^\/person\//.test(p))pt='person';else if(/^\/(movies|series|top-rated|top10|genres|upcoming)/.test(p))pt='list';
-var oi=/(?:^|;\s*)sp_consent=1(?:;|$)/.test(document.cookie);
 function hs(s){var h=5381;for(var i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))>>>0;return h.toString(16)}
-function t2(){var o={webgl_renderer:'',canvas_hash:'',audio_hash:'',webgpu_vendor:''};if(!c.t2||!oi)return o;
+function t2(){var o={webgl_renderer:'',canvas_hash:'',audio_hash:'',webgpu_vendor:''};if(!c.t2)return o;
 try{var cv=document.createElement('canvas'),gl=cv.getContext('webgl');
 if(gl){var e=gl.getExtension('WEBGL_debug_renderer_info');o.webgl_renderer=String(e?gl.getParameter(e.UNMASKED_RENDERER_WEBGL):gl.getParameter(gl.RENDERER)||'')}
 var c2=document.createElement('canvas');c2.width=220;c2.height=30;var x=c2.getContext('2d');
