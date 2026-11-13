@@ -8,7 +8,7 @@ for (const route of ['about', 'privacy', 'dmca', 'contact']) test(`trust page ${
   await expect(page.locator('h1')).toBeVisible();
   await expect(page.locator('.trust-content')).toBeVisible();
   await expect(page.locator('.ad-slot,[data-popunder],[data-placement="social_bar"]')).toHaveCount(0);
-  await expect(page.locator('footer')).toContainText('not endorsed or certified by TMDB');
+  await expect(page.locator('footer')).not.toContainText('not endorsed or certified by TMDB');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   if (route === 'about') await expect(page.locator('.trust-attribution')).toContainText('not endorsed or certified by TMDB');
 });

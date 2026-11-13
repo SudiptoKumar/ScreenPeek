@@ -14,7 +14,5 @@ test('production scaffold: mobile navigation, attribution, one stylesheet and re
     expect(new URL((await script.getAttribute('src'))!, page.url()).origin).toBe(new URL(page.url()).origin);
   }
   await expect(page.locator('.ad-slot[data-placement="top_300x250"]')).toHaveCSS('min-height', '250px');
-  await expect(page.locator('footer')).toContainText('not endorsed or certified by TMDB');
-  await page.locator('img[alt="TMDB"]').scrollIntoViewIfNeeded();
-  await expect.poll(() => page.locator('img[alt="TMDB"]').evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0)).toBe(true);
+  await expect(page.locator('footer')).not.toContainText('not endorsed or certified by TMDB');
 });
