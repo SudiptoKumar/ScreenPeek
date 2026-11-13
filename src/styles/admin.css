@@ -575,3 +575,21 @@ html { scroll-padding-bottom: 116px; }
 .progress-row .payout-bar { margin: 6px 0 0; }
 [data-amt] { transition: filter .18s ease; }
 .amounts-hidden [data-amt] { filter: blur(7px); }
+
+/* ---------- labeled phone cards: every value carries its label ----------
+   Tables stay tables on desktop. On phones a row becomes a card and each
+   cell with a data-label renders as one ledger line (label left, value
+   right) — the pattern the owner approved on the traffic sheet. Cells
+   without data-label keep the compact chip layout. */
+.admin-shell .ledger dd small { color: var(--muted); font-weight: 400; }
+@media (max-width: 640px) {
+  .admin-shell .admin-table td[data-label] {
+    display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline;
+    gap: 2px 14px; flex: 1 1 100%; min-width: 0; text-align: right;
+  }
+  .admin-shell .admin-table td[data-label]::before {
+    content: attr(data-label); color: var(--muted); font-size: 11.5px; font-weight: 700;
+    letter-spacing: .06em; text-transform: uppercase; text-align: left; white-space: nowrap;
+  }
+  .admin-shell .admin-table td[data-label] small { flex: 1 1 100%; text-align: right; }
+}

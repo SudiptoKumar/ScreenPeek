@@ -98,7 +98,12 @@ third-party font requests anywhere.
 ## Admin panel patterns (v4 control desk)
 
 Reading screens are **data only**: label → value, short fragments, no
-explanatory sentences.
+explanatory sentences. No stat tiles. Tables stay tables on desktop; on
+phones each row becomes a card of ledger lines — every cell carries a
+`data-label`, so a value never appears without its label (the traffic-sheet
+rule). The Tracking section follows this in full (owner catch, 2026-11-14:
+its overview was still stat tiles and its phone lists showed unlabeled
+values).
 
 - **Header**: module heading left; top-right is only a person icon in a circle
   (account email/role live in its tooltip). Module nav, bottom tab bar and the
