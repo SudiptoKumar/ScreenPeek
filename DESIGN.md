@@ -8,9 +8,10 @@ describes what exists; PRODUCT.md describes what the product is.
 
 | Token | Value | Use |
 | --- | --- | --- |
-| `--bg` | `#0b0b10` | Page ground |
-| `--panel` | `#15151d` | Cards, panels, tiles |
-| `--panel2` | `#1a1a23` | Raised/inner surfaces, bar tracks |
+| `--bg` | `#0d0d0f` | Page ground (main background) |
+| Header | `#151518` | Public header background; admin top bar uses it translucent |
+| `--panel` | `#1b1b20` | Cards background, panels, tiles |
+| `--panel2` | `#202027` | Raised/inner surfaces, bar tracks |
 | `--line` | `rgba(255,255,255,.08)` (site) / `#26262f` | Hairline dividers, borders |
 | `--text` | `#f5f5f7` | Primary text |
 | `--muted` | `#a2a2ad` | Secondary text, labels |
