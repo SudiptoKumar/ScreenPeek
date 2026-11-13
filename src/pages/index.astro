@@ -45,16 +45,16 @@ const soonFull = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString('e
       <div class="poster-row">{splitSeries.map(title => <PosterCard title={title} mediaBase={env.R2_PUBLIC_BASE} />)}</div>
     </section>}
     <AdStack pageType="home" placement="top_300x250" />
-    {catalogue.netflixNew.length > 0 && <section class="shelf" aria-labelledby="nf-new-title"><div class="shelf-head"><h2 id="nf-new-title">New on <span class="plogo nf">NETFLIX</span></h2></div>
+    {catalogue.netflixNew.length > 0 && <section class="shelf" id="netflix" aria-labelledby="nf-new-title"><div class="shelf-head"><h2 id="nf-new-title">New on <span class="plogo nf">NETFLIX</span></h2></div>
       <div class="poster-row">{catalogue.netflixNew.map(title => <PosterCard title={title} mediaBase={env.R2_PUBLIC_BASE} />)}</div>
     </section>}
     {catalogue.netflixTrend.length > 0 && <section class="shelf" aria-labelledby="nf-trend-title"><div class="shelf-head"><h2 id="nf-trend-title">Trending on <span class="plogo nf">NETFLIX</span></h2></div>
       <div class="poster-row">{catalogue.netflixTrend.map(title => <PosterCard title={title} mediaBase={env.R2_PUBLIC_BASE} />)}</div>
     </section>}
-    {catalogue.primeNew.length > 0 && <section class="shelf" aria-labelledby="pv-new-title"><div class="shelf-head"><h2 id="pv-new-title">New on <span class="plogo pv">prime video</span></h2></div>
+    {catalogue.primeNew.length > 0 && <section class="shelf" id="prime" aria-labelledby="pv-new-title"><div class="shelf-head"><h2 id="pv-new-title">New on <span class="plogo pv">prime video</span></h2></div>
       <div class="poster-row">{catalogue.primeNew.map(title => <PosterCard title={title} mediaBase={env.R2_PUBLIC_BASE} />)}</div>
     </section>}
-    {catalogue.appleNew.length > 0 && <section class="shelf" aria-labelledby="ap-new-title"><div class="shelf-head"><h2 id="ap-new-title">New on <span class="plogo ap">Apple TV+</span></h2></div>
+    {catalogue.appleNew.length > 0 && <section class="shelf" id="apple" aria-labelledby="ap-new-title"><div class="shelf-head"><h2 id="ap-new-title">New on <span class="plogo ap">Apple TV+</span></h2></div>
       <div class="poster-row">{catalogue.appleNew.map(title => <PosterCard title={title} mediaBase={env.R2_PUBLIC_BASE} />)}</div>
     </section>}
     <AdStack pageType="home" placement="native" />

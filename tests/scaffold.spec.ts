@@ -7,8 +7,9 @@ test('production scaffold: mobile navigation, attribution, one stylesheet and re
   await expect(page).toHaveTitle(/ScreenPeek/);
   expect(await page.locator('header').evaluate(el => el.getBoundingClientRect().height)).toBeLessThanOrEqual(56);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.locator('summary').click();
-  await expect(page.getByRole('navigation', { name: 'Mobile navigation' })).toBeVisible();
+  await page.getByRole('button', { name: 'Open menu' }).click();
+  await expect(page.locator('#sp-menu')).toBeVisible();
+  await expect(page.locator('#sp-menu').getByRole('link', { name: 'Top Rated' })).toBeVisible();
   await expect(page.locator('link[rel="stylesheet"]')).toHaveCount(1);
   for (const script of await page.locator('script[src]').all()) {
     expect(new URL((await script.getAttribute('src'))!, page.url()).origin).toBe(new URL(page.url()).origin);

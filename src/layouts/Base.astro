@@ -28,6 +28,8 @@ if (pageType !== 'utility') {
 }
 const previewCountry = previewCountryOf(Astro.request);
 const logo = mediaUrl(site.logo, env.R2_PUBLIC_BASE);
+const currentPath = Astro.url.pathname;
+const navCurrent = (href: string) => (href === '/' ? currentPath === '/' : currentPath.startsWith(href)) ? 'page' : undefined;
 const canonical = canonicalUrl(Astro.url, siteOrigin(env.SITE_URL), pageNumber);
 let override: { title: string | null; noindex: number } | null = null;
 try { override = await env.DB.prepare('SELECT title,noindex FROM seo_overrides WHERE path=? AND deleted_at IS NULL').bind(Astro.url.pathname).first(); } catch { /* Default metadata remains available. */ }
@@ -60,24 +62,55 @@ if (pageType !== 'utility' && Astro.url.pathname !== '/' && !structured.some(sch
   <body data-page-type={pageType}>
     {previewCountry && <div class="preview-banner">Preview mode: viewing as a visitor from {previewCountry} ({countryNames[previewCountry]}). <a href="/admin/tools/?preview=off">Exit preview</a></div>}
     <a class="skip" href="#content">Skip to content</a>
-    <header class="site-header">
+    <header class="site-header" id="site-header">
       <a class="brand" href="/" aria-label={`${site.name} home`}>{logo ? <img src={logo} width="128" height="32" alt={site.name} /> : site.name === 'ScreenPeek' ? <>Screen<span>Peek</span></> : site.name}</a>
-      <nav class="desktop-nav" aria-label="Main navigation">
-        <a href="/movies/">Movies</a><a href="/series/">Series</a>
-        <a href="/top10/">Top 10</a><a href="/top-rated/">Top Rated</a><a href="/genres/">Genres</a><a href="/upcoming/">Upcoming</a>
+      <nav class="main-nav" aria-label="Main navigation">
+        <a href="/" aria-current={navCurrent('/')}>Home</a><a href="/movies/" aria-current={navCurrent('/movies/')}>Movies</a><a href="/series/" aria-current={navCurrent('/series/')}>Series</a><a href="/genres/" aria-current={navCurrent('/genres/')}>Genres</a><a href="/top-rated/" aria-current={navCurrent('/top-rated/')}>Top Rated</a><a href="/top10/" aria-current={navCurrent('/top10/')}>Top 10</a><a href="/new/" aria-current={navCurrent('/new/')}>New</a><a href="/upcoming/" aria-current={navCurrent('/upcoming/')}>Upcoming</a>
       </nav>
-      <form class="header-search" action="/search/" role="search" autocomplete="off"><label class="sr-only" for="search">Search titles</label>
-        <input id="search" name="q" type="search" placeholder="Search movies & shows" maxlength="100" autocomplete="off" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-controls="search-suggestions" aria-expanded="false" />
-        <div class="search-panel" data-search-panel hidden>
-          <ul id="search-suggestions" class="search-suggestions" role="listbox" aria-label="Title suggestions"></ul>
-          <p class="search-status" data-search-status role="status" aria-live="polite"></p>
-          <a class="search-all" data-search-all href="/search/">See all results →</a>
-        </div>
-      </form>
-      <details class="mobile-menu"><summary aria-label="Open navigation">Menu</summary>
-        <nav aria-label="Mobile navigation"><a href="/movies/">Movies</a><a href="/series/">Series</a><a href="/top10/">Top 10</a><a href="/top-rated/">Top Rated</a><a href="/genres/">Genres</a><a href="/upcoming/">Upcoming</a></nav>
-      </details>
+      <div class="head-right">
+        <form class="header-search searchbox" action="/search/" role="search" autocomplete="off">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <label class="sr-only" for="search">Search titles</label>
+          <input id="search" name="q" type="search" placeholder="Titles, people, genres" maxlength="100" autocomplete="off" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-controls="search-suggestions" aria-expanded="false" />
+          <div class="search-panel" data-search-panel hidden>
+            <ul id="search-suggestions" class="search-suggestions" role="listbox" aria-label="Title suggestions"></ul>
+            <p class="search-status" data-search-status role="status" aria-live="polite"></p>
+            <a class="search-all" data-search-all href="/search/">See all results →</a>
+          </div>
+        </form>
+        <button class="searchbtn" type="button" aria-label="Open search" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></button>
+        <button class="burger" id="sp-burger" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="sp-menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+      </div>
     </header>
+    <div class="sp-menu" id="sp-menu" role="menu" hidden>
+      <a href="/">Home</a>
+      <a href="/movies/">Movies <span>Browse all</span></a>
+      <a href="/series/">Series <span>Browse all</span></a>
+      <a href="/new/">New Arrivals</a>
+      <a href="/upcoming/">Upcoming</a>
+      <a href="/top10/">Top 10 This Week</a>
+      <a href="/top-rated/">Top Rated</a>
+      <div class="msep" aria-hidden="true"></div>
+      <div class="mlabel">Watch on</div>
+      <a href="/#netflix">Netflix</a>
+      <a href="/#prime">Prime Video</a>
+      <a href="/#apple">Apple TV+</a>
+      <div class="msep" aria-hidden="true"></div>
+      <a href="/genres/">All Genres</a>
+      <a href="/contact/">Contact</a>
+      <a href="/dmca/">DMCA</a>
+    </div>
+    <script>
+      const spHeader = document.getElementById('site-header');
+      const spBurger = document.getElementById('sp-burger');
+      const spMenu = document.getElementById('sp-menu');
+      const spSearchBtn = document.querySelector('.searchbtn');
+      const closeSpMenu = () => { spMenu?.setAttribute('hidden', ''); spBurger?.setAttribute('aria-expanded', 'false'); };
+      spBurger?.addEventListener('click', () => { if (!spMenu) return; const open = spMenu.hasAttribute('hidden'); if (open) spMenu.removeAttribute('hidden'); else spMenu.setAttribute('hidden', ''); spBurger.setAttribute('aria-expanded', String(open)); });
+      spSearchBtn?.addEventListener('click', () => { if (!spHeader) return; const open = spHeader.classList.toggle('search-open'); spSearchBtn.setAttribute('aria-expanded', String(open)); if (open) document.getElementById('search')?.focus(); });
+      document.addEventListener('click', (event) => { const target = event.target as Node; if (spMenu && !spMenu.hasAttribute('hidden') && !spMenu.contains(target) && !spBurger?.contains(target)) closeSpMenu(); });
+      document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeSpMenu(); });
+    </script>
     <main id="content">
       {sample && <p class="notice sample-notice"><strong>Sample catalogue</strong> · These titles are synthetic development data. Remove the sample seed before live imports.</p>}
       <slot />

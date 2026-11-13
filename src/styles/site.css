@@ -158,3 +158,41 @@ body[data-page-type="home"] main{max-width:1340px}
 .trailer-load:hover .trailer-disc{background:var(--cta-hover)}
 .trailer-player .trailer-facade-copy small{color:var(--muted)}
 .trailer-player iframe{width:100%;height:100%;border:0;display:block}
+
+/* Design 1 header (menu fix): wordmark, inline nav, searchbox, burger + dropdown menu */
+.site-header{flex-wrap:nowrap;height:56px;gap:14px;padding:0 clamp(18px,4vw,58px)}
+.site-header .brand{font-size:21px;font-weight:900;letter-spacing:-.04em;line-height:1}
+.main-nav{display:none}
+.head-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+.searchbox{display:flex;align-items:center;gap:8px;background:#101014;border:1px solid var(--line);border-radius:10px;padding:7px 10px;min-width:220px;position:relative}
+.searchbox>svg{width:17px;height:17px;stroke:var(--muted);flex:0 0 auto}
+.searchbox input{background:transparent;border:0;padding:0;width:100%;border-radius:0}
+.searchbox input:focus{outline:none}
+.searchbox:focus-within{border-color:var(--muted)}
+.searchbtn{display:none;place-items:center;width:44px;height:44px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);cursor:pointer;flex:0 0 auto;color:var(--text)}
+.searchbtn svg{width:19px;height:19px}
+.burger{width:42px;height:42px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);display:grid;place-items:center;cursor:pointer;color:var(--text);flex:0 0 auto;padding:0}
+.burger svg{width:20px;height:20px}
+.burger:hover{border-color:var(--muted)}
+.sp-menu{position:fixed;top:66px;right:clamp(18px,4vw,58px);z-index:59;width:min(264px,86vw);background:rgba(18,18,22,.94);border:1px solid var(--line);border-radius:14px;backdrop-filter:blur(14px);padding:10px;box-shadow:0 24px 60px rgba(0,0,0,.55)}
+.sp-menu[hidden]{display:none}
+.sp-menu a{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-radius:9px;font-size:14.5px;font-weight:600}
+.sp-menu a:hover{background:var(--panel2);text-decoration:none}
+.sp-menu a span{color:var(--muted);font-size:12px;font-weight:500}
+.sp-menu .msep{height:1px;background:var(--line);margin:7px 4px}
+.sp-menu .mlabel{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);font-weight:700;padding:8px 12px 2px}
+@media (min-width:901px){
+  .site-header{height:68px;gap:30px}
+  .site-header .brand{font-size:25px}
+  .main-nav{display:flex;gap:22px;flex-wrap:nowrap;font-size:13.5px;font-weight:500}
+  .main-nav a{color:#e8e8ec;display:inline-flex;align-items:center;min-height:40px;white-space:nowrap}
+  .main-nav a:hover{color:#fff;text-decoration:none}
+  .main-nav a[aria-current="page"]{color:#fff;font-weight:700}
+  .sp-menu{top:76px}
+}
+@media (max-width:900px){ .searchbox{min-width:0;width:184px} }
+@media (max-width:860px){
+  .site-header .searchbox{display:none}
+  .site-header.search-open .searchbox{display:flex;position:absolute;top:calc(100% + 8px);left:12px;right:12px;width:auto;z-index:30;background:var(--panel)}
+  .searchbtn{display:grid}
+}
