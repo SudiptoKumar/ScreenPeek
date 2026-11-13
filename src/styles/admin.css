@@ -543,3 +543,35 @@ html { scroll-padding-bottom: 116px; }
   html { scroll-padding-top: 76px; }
   .admin-shell section, .admin-shell .admin-slot { scroll-margin-top: 76px; }
 }
+
+/* ---------- v4 control desk (redesign stage 5) ---------- */
+.admin-person { width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel); display: inline-flex; align-items: center; justify-content: center; color: var(--muted); flex: 0 0 auto; }
+.admin-person svg { width: 20px; height: 20px; }
+.since-line { color: var(--muted); font-size: 13.5px; font-variant-numeric: tabular-nums; margin: 2px 0 14px; }
+.since-line strong { color: var(--text); }
+.vault { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 20px; margin: 16px 0; }
+.vault-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.vault-head h2 { font-size: 16px; margin: 0; }
+.hide-amounts { border: 1px solid var(--line); background: var(--panel2); color: var(--text); font-size: 12.5px; font-weight: 600; border-radius: 999px; padding: 7px 13px; cursor: pointer; min-height: 34px; }
+.vault-label { color: var(--muted); font-size: 12.5px; margin: 16px 0 2px; }
+.vault-figure { font-size: clamp(36px, 8vw, 48px); font-weight: 800; letter-spacing: -.02em; line-height: 1.05; margin: 0; font-variant-numeric: tabular-nums; }
+.payout-bar { height: 8px; border-radius: 999px; background: var(--panel2); overflow: hidden; margin: 12px 0 8px; }
+.payout-bar span { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
+.payout-line { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; margin: 0 0 4px; }
+.ledger { margin: 10px 0 0; }
+.ledger > div { display: flex; justify-content: space-between; gap: 16px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.ledger > div:last-child { border-bottom: 0; }
+.ledger dt { color: var(--muted); font-size: 13.5px; margin: 0; }
+.ledger dd { margin: 0; font-weight: 600; font-size: 13.5px; font-variant-numeric: tabular-nums; text-align: right; }
+.vault-trend { margin-top: 18px; }
+.vault-trend .bar-value { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.vault-formats { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 6px; }
+.vault-fine { color: var(--muted); font-size: 12px; line-height: 1.55; margin: 14px 0 0; }
+.ops-panel { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; margin: 14px 0; }
+.ops-panel h2 { font-size: 16px; margin: 0 0 4px; }
+.progress-row { margin: 12px 0 4px; }
+.progress-top { display: flex; justify-content: space-between; font-size: 13.5px; }
+.progress-top span:last-child { color: var(--muted); font-variant-numeric: tabular-nums; }
+.progress-row .payout-bar { margin: 6px 0 0; }
+[data-amt] { transition: filter .18s ease; }
+.amounts-hidden [data-amt] { filter: blur(7px); }

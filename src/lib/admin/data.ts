@@ -15,7 +15,7 @@ export interface AdminTitle { id: number; type: 'movie' | 'tv'; slug: string; ti
 export interface SyncRow { id: number; started_at: string; finished_at: string | null; status: string; added: number; updated: number; errors: string; }
 export interface HistoryRow { id: number; ts: string; actor: string | null; entity: string; entity_id: string; }
 export interface SettingRow { key: string; value: string; revision: number; }
-interface CatalogueMeters { titles: number; gated: number; people: number; clicks: number; }
+interface CatalogueMeters { titles: number; gated: number; people: number; clicks: number; movies?: number; series?: number; movieGoal?: number; seriesGoal?: number; }
 export interface RevenueDay { date: string; impressions: number; clicks: number; cpm: number; revenue: number; }
 export interface RevenueMeters { yesterday: RevenueDay | null; monthRevenue: number; monthImpressions: number; allTime: number; balanceEstimate: number; updatedAt: string | null; formats: Array<{ placement_id: number; revenue: number; impressions: number }>; trend: RevenueDay[]; payoutMin: number; }
 const like = (value: string) => `%${value.replaceAll('\\', '\\\\').replaceAll('%', '\\%').replaceAll('_', '\\_')}%`;
@@ -45,13 +45,19 @@ export async function adminData(env: AdminEnvironment, actor: AdminIdentity, mod
   else if (module === 'pages') documents = (await db.prepare("SELECT * FROM pages WHERE slug IN('about','privacy','dmca','contact','404') ORDER BY slug").all<TrustDocument>()).results;
   else if (module === 'dashboard') {
     const day = new Date().toISOString().slice(0, 10);
-    const [counts, history, logs, queued] = await Promise.all([
-      db.prepare('SELECT (SELECT COUNT(*) FROM titles WHERE deleted=0 AND deleted_at IS NULL) AS titles,(SELECT COUNT(*) FROM titles WHERE quality_gate=1 AND hidden=0 AND deleted=0 AND deleted_at IS NULL) AS gated,(SELECT COUNT(*) FROM people WHERE deleted_at IS NULL) AS people,(SELECT COALESCE(SUM(count),0) FROM click_log WHERE day=?) AS clicks').bind(day).first<CatalogueMeters>(),
+    const [counts, history, logs, queued, goalRows] = await Promise.all([
+      db.prepare('SELECT (SELECT COUNT(*) FROM titles WHERE deleted=0 AND deleted_at IS NULL) AS titles,(SELECT COUNT(*) FROM titles WHERE quality_gate=1 AND hidden=0 AND deleted=0 AND deleted_at IS NULL) AS gated,(SELECT COUNT(*) FROM people WHERE deleted_at IS NULL) AS people,(SELECT COALESCE(SUM(count),0) FROM click_log WHERE day=?) AS clicks,(SELECT COUNT(*) FROM titles WHERE type=\'movie\' AND poster_r2 IS NOT NULL AND deleted=0 AND deleted_at IS NULL) AS movies,(SELECT COUNT(*) FROM titles WHERE type=\'tv\' AND poster_r2 IS NOT NULL AND deleted=0 AND deleted_at IS NULL) AS series').bind(day).first<CatalogueMeters>(),
       db.prepare('SELECT id,ts,actor,entity,entity_id FROM admin_log ORDER BY id DESC LIMIT 20').all<HistoryRow>(),
       db.prepare('SELECT * FROM sync_log ORDER BY id DESC LIMIT 1').all<SyncRow>(),
       db.prepare('SELECT COUNT(*) AS count FROM admin_delivery WHERE kv_done=0 OR purge_done=0').first<{ count: number }>(),
+      db.prepare("SELECT key,value FROM config WHERE key IN ('sync_movie_goal','sync_series_goal')").all<{ key: string; value: string }>(),
     ]);
     catalogue = counts; changes = history.results; sync = logs.results; pending = queued?.count || 0;
+    if (catalogue) {
+      const goals = new Map((goalRows.results || []).map(row => [row.key, Number.parseInt(row.value, 10)]));
+      catalogue.movieGoal = Number.isFinite(goals.get('sync_movie_goal')) && (goals.get('sync_movie_goal') || 0) > 0 ? goals.get('sync_movie_goal') : 5000;
+      catalogue.seriesGoal = Number.isFinite(goals.get('sync_series_goal')) && (goals.get('sync_series_goal') || 0) > 0 ? goals.get('sync_series_goal') : 2000;
+    }
     try {
       const now = new Date();
       const yesterday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1)).toISOString().slice(0, 10);
