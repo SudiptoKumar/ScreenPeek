@@ -249,6 +249,7 @@ INSERT OR IGNORE INTO config (key, value) VALUES
   ('tracking_status_map','{}'),
   ('tracking_quality_weights','{}'),
   ('tracking_quality_digest','0'),
+  ('tracking_quality_gate_enabled','0'),
   ('tracking_postback_lenient','0'),
   ('tracking_degraded','0'),
   ('tracking_tier1_countries','US,GB,CA,AU'),

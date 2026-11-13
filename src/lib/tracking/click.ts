@@ -166,5 +166,10 @@ export async function captureClick(env: { DB: D1Database; CONFIG: KVNamespace },
        ON CONFLICT(day,slug,country,device_type,dest_host,currency) DO UPDATE SET clicks=clicks+1, unique_visitors=unique_visitors+excluded.unique_visitors`,
     ).bind(day, row.slug, row.country, row.device_type, row.dest_host, uniqueAdd));
     await env.DB.batch(statements);
+    // Variant cap counter (F19) — the router reads these from KV.
+    if (input.variantId != null) {
+      const { bumpVariantCounter } = await import('./routing.ts');
+      await bumpVariantCounter(env, 'clicks', input.variantId, new Date());
+    }
   } catch { console.warn('Insight click capture was unavailable.'); }
 }

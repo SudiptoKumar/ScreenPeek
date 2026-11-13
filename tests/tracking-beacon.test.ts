@@ -12,10 +12,14 @@ const vectors = JSON.parse(await readFile('tests/fixtures/tracking-vectors.json'
   beacon_payloads: { valid_pageview: Record<string, unknown>; invalid_unknown_keys: Record<string, unknown> };
 };
 
-test('G6.1 beacon asset is at most 2 KB gzipped', async () => {
+test('G6.1/F17 beacon asset stays inside its gzip budget (2 KB at F6, 3 KB with the F17 signals)', async () => {
   const source = await readFile('public/sp-beacon.js');
   const size = gzipSync(source).length;
-  assert.ok(size <= 2048, `beacon gz size ${size} exceeds 2048`);
+  assert.ok(size <= 3072, `beacon gz size ${size} exceeds 3072`);
+  const text = source.toString('utf8');
+  for (const marker of ['getBattery', 'mediaDevices', 'RTCPeerConnection', 'OfflineAudioContext', 'requestAdapter', 'webdriver', 'plugins']) {
+    assert.ok(text.includes(marker), `beacon is missing the ${marker} collector`);
+  }
 });
 
 test('G7.3 unknown payload keys are dropped by the sanitizer', () => {
@@ -103,5 +107,29 @@ test('beacon endpoint is dark (404) while tracking is off', { timeout: 60_000 },
   try {
     await local.db.batch([{ sql: "UPDATE config SET value='0' WHERE key='tracking_enabled'" }]);
     assert.equal((await ingestBeacon(env, post({ type: 'pageview' }))).status, 404);
+  } finally { await local.dispose(); await rm(state, { recursive: true, force: true }); }
+});
+
+test('G17 extra signals survive the sanitizer and land in payload_json; absent battery stays null', { timeout: 60_000 }, async () => {
+  const clean = sanitizeBeacon({ type: 'pageview', page_url: '/', is_webdriver: 1, plugins_count: 3, pdf_viewer: 1, battery_level: 82, battery_charging: 0, audio_hash: 'a1b2', webgpu_vendor: 'apple', media_devices: { audioinput: 1, videoinput: 2, audiooutput: 1 } });
+  assert.ok(clean);
+  assert.equal(clean.numbers.is_webdriver, 1);
+  assert.equal(clean.numbers.battery_level, 82);
+  assert.equal(clean.strings.audio_hash, 'a1b2');
+  assert.deepEqual(clean.mediaDevices, { audioinput: 1, videoinput: 2, audiooutput: 1 });
+  const bare = sanitizeBeacon({ type: 'pageview', page_url: '/' });
+  assert.equal(bare?.numbers.battery_level, null); // non-Chromium: no battery API, field stays null
+
+  const { state, local, env } = await beaconEnv();
+  try {
+    const outcome = await ingestBeacon(env, post({ type: 'pageview', page_url: '/', page_type: 'home', is_webdriver: 0, plugins_count: 5, battery_level: 64, battery_charging: 1, media_devices: { audioinput: 1, videoinput: 1, audiooutput: 2 } }, { Cookie: 'sp_vid=v17; sp_sid=s17' }));
+    assert.equal(outcome.status, 204);
+    const rows = await local.db.query<{ payload_json: string }>('SELECT payload_json FROM tr_events');
+    assert.equal(rows.length, 1);
+    const payload = JSON.parse(rows[0].payload_json) as Record<string, unknown>;
+    assert.equal(payload.battery_level, 64);
+    assert.equal(payload.battery_charging, 1);
+    assert.equal(payload.plugins_count, 5);
+    assert.deepEqual(payload.media_devices, { audioinput: 1, videoinput: 1, audiooutput: 2 });
   } finally { await local.dispose(); await rm(state, { recursive: true, force: true }); }
 });

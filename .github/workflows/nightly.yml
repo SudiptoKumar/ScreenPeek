@@ -72,6 +72,22 @@ jobs:
           fi
           # The CLI validates type-prefixed IDs; input is never evaluated as shell.
           npm run sync:run -- "${args[@]}"
+      - name: Insight nightly jobs (auto-optimiser, retention, postbacks, health, alerts, report)
+        if: ${{ vars.SCREENPEEK_SYNC_ENABLED == '1' }}
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+          KV_NAMESPACE_ID: ${{ secrets.KV_NAMESPACE_ID }}
+          MONEY_BOT_TOKEN: ${{ secrets.MONEY_BOT_TOKEN }}
+          MONEY_BOT_CHAT_ID: ${{ secrets.MONEY_BOT_CHAT_ID }}
+        run: |
+          node scripts/tool.mjs node scripts/insight_jobs.ts autoopt
+          node scripts/tool.mjs node scripts/insight_jobs.ts retention
+          node scripts/tool.mjs node scripts/insight_jobs.ts postbacks-retry
+          node scripts/tool.mjs node scripts/insight_jobs.ts link-health
+          node scripts/tool.mjs node scripts/insight_jobs.ts alerts
+          node scripts/tool.mjs node scripts/insight_jobs.ts weekly-report
       - name: Build static hubs and top titles with long-tail Worker
         env:
           STATIC_SOURCE_REMOTE: '1'

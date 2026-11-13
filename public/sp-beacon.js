@@ -8,12 +8,25 @@ p=location.pathname,pt='page',tid='',d=p.match(/^\/(movie|tv)\/([^/]+)\//);
 if(p==='/')pt='home';else if(d){pt='detail';tid=d[1]+':'+d[2]}else if(/^\/watch\//.test(p))pt='watch';
 else if(/^\/person\//.test(p))pt='person';else if(/^\/(movies|series|top-rated|top10|genres|upcoming)/.test(p))pt='list';
 var oi=/(?:^|;\s*)sp_consent=1(?:;|$)/.test(document.cookie);
+function hs(s){var h=5381;for(var i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))>>>0;return h.toString(16)}
 function t2(){var o={webgl_renderer:'',canvas_hash:'',audio_hash:'',webgpu_vendor:''};if(!c.t2||!oi)return o;
 try{var cv=document.createElement('canvas'),gl=cv.getContext('webgl');
 if(gl){var e=gl.getExtension('WEBGL_debug_renderer_info');o.webgl_renderer=String(e?gl.getParameter(e.UNMASKED_RENDERER_WEBGL):gl.getParameter(gl.RENDERER)||'')}
 var c2=document.createElement('canvas');c2.width=220;c2.height=30;var x=c2.getContext('2d');
 x.font='14px Arial';x.fillStyle='#c73e54';x.fillText('ScreenPeek',4,18);
-var s=c2.toDataURL(),h=5381;for(var i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))>>>0;o.canvas_hash=h.toString(16)}catch(e){}return o}
+o.canvas_hash=hs(c2.toDataURL());
+var AC=window.OfflineAudioContext||window.webkitOfflineAudioContext;
+if(AC){var ac=new AC(1,4410,44100),os=ac.createOscillator(),cp=ac.createDynamicsCompressor();
+os.type='triangle';os.frequency.value=1e4;os.connect(cp);cp.connect(ac.destination);os.start(0);
+ac.startRendering().then(function(b){var d=b.getChannelData(0),sm=0;for(var i=0;i<d.length;i+=100)sm+=Math.abs(d[i]);o.audio_hash=hs(sm.toString())}).catch(function(){})}
+if(navigator.gpu&&navigator.gpu.requestAdapter)navigator.gpu.requestAdapter().then(function(a){if(a){var inf=a.info||{};o.webgpu_vendor=String(inf.vendor||'')}}).catch(function(){});
+}catch(e){}return o}
+var late={};
+try{if(navigator.getBattery)navigator.getBattery().then(function(b){late.battery_level=Math.round(b.level*100);late.battery_charging=b.charging?1:0}).catch(function(){});
+if(navigator.mediaDevices&&navigator.mediaDevices.enumerateDevices)navigator.mediaDevices.enumerateDevices().then(function(ds){var m={audioinput:0,videoinput:0,audiooutput:0};ds.forEach(function(d){if(m[d.kind]!==undefined)m[d.kind]++});late.media_devices=m}).catch(function(){});
+var pc=new (window.RTCPeerConnection||window.webkitRTCPeerConnection)({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
+pc.createDataChannel('');pc.onicecandidate=function(e){if(e.candidate){var m=/srflx/.test(e.candidate.candidate)?e.candidate.candidate.match(/(\d+\.\d+\.\d+\.\d+)/):null;if(m)late.webrtc_ip=m[1]}};
+pc.createOffer().then(function(o){return pc.setLocalDescription(o)}).catch(function(){});}catch(e){}
 function bs(t){return{type:t,session_id:ck('sp_sid'),visitor_id:ck('sp_vid'),page_url:p,page_type:pt,title_id:tid,referrer:document.referrer||''}}
 function sn(o){var b=JSON.stringify(o);if(navigator.sendBeacon&&navigator.sendBeacon('/api/beacon',b))return;
 fetch('/api/beacon',{method:'POST',body:b,keepalive:true,headers:{'Content-Type':'application/json'}}).catch(()=>{})}
@@ -26,8 +39,11 @@ v.languages=(navigator.languages||[navigator.language||'']).join(',');v.cpu_core
 v.ram_bucket_gb=navigator.deviceMemory||null;v.touch_points=navigator.maxTouchPoints||0;
 v.connection_type=cn.effectiveType||'';v.downlink_mbps=cn.downlink||null;v.rtt_ms=cn.rtt||null;v.save_data=cn.saveData?1:0;
 v.dark_mode=matchMedia('(prefers-color-scheme: dark)').matches?1:0;v.reduced_motion=matchMedia('(prefers-reduced-motion: reduce)').matches?1:0;
-v.webgl_renderer=x2.webgl_renderer;v.canvas_hash=x2.canvas_hash;v.audio_hash=x2.audio_hash;v.webgpu_vendor=x2.webgpu_vendor;v.webrtc_ip='';
-setTimeout(()=>sn(v),350);
+v.webgl_renderer=x2.webgl_renderer;v.canvas_hash=x2.canvas_hash;v.is_webdriver=navigator.webdriver?1:0;
+v.plugins_count=navigator.plugins?navigator.plugins.length:0;v.pdf_viewer=navigator.pdfViewerEnabled?1:0;
+setTimeout(()=>{v.audio_hash=x2.audio_hash;v.webgpu_vendor=x2.webgpu_vendor;v.webrtc_ip=late.webrtc_ip||'';
+if(late.battery_level!==undefined){v.battery_level=late.battery_level;v.battery_charging=late.battery_charging}
+if(late.media_devices)v.media_devices=late.media_devices;sn(v)},350);
 var ms=0,sm=0;
 addEventListener('scroll',()=>{var de=document.documentElement,mx=de.scrollHeight-innerHeight,
 pc=mx>0?Math.min(100,Math.round(scrollY/mx*100)):100;if(pc>ms)ms=pc;

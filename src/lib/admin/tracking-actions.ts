@@ -128,5 +128,112 @@ export async function trackingAction(env: TrackingActionEnvironment, identity: A
     return `Postback test for ${network}: HTTP ${result.http} — ${result.result}${result.result === 'matched' ? ' (a test conversion was recorded; purge it any time with the test-data tool)' : ''}. Tracking must be enabled and the network secret (when set) must match for a match.`;
   }
 
+  if (action === 'tracking_testfire_outgoing') {
+    const template = text(form, 'template', 2000).trim();
+    if (!/^https:\/\//.test(template)) throw new AdminError('Outgoing test-fire: enter an https fire-URL template.');
+    const { testFireOutgoing } = await import('../tracking/outgoing.ts');
+    const result = await testFireOutgoing(template);
+    await log(env, identity, 'tracking_testfire_outgoing', { hostPath: template.replace(/^https:\/\//, '').split('?')[0], httpStatus: result.httpStatus });
+    return result.httpStatus
+      ? `Test-fire sent — the endpoint answered HTTP ${result.httpStatus}${result.ok ? ' (success)' : ''}. The payload was marked TEST throughout; no conversion or queue row was created.`
+      : 'Test-fire sent — the endpoint did not answer (network error or 5-second timeout). The payload was marked TEST throughout; no conversion or queue row was created.';
+  }
+
+  if (action === 'tracking_cost_import') {
+    // F25: CSV cost import. One header row (day,link_slug,source,cost,
+    // currency), cost as a decimal amount in the row's currency. Bad
+    // rows are rejected with their line numbers; good rows still land.
+    const lines = text(form, 'csv', 100_000).split(/\r?\n/);
+    let imported = 0;
+    const rejected: string[] = [];
+    for (let index = 0; index < lines.length; index++) {
+      const lineNo = index + 1;
+      const raw = lines[index].trim();
+      if (!raw) continue;
+      if (lineNo === 1 && /^day\s*,/i.test(raw)) continue; // header
+      const fields = raw.split(',').map(part => part.trim().replace(/^"|"$/g, ''));
+      if (fields.length !== 5) { rejected.push(`line ${lineNo} (expected 5 columns)`); continue; }
+      const [day, slug, source, costRaw, currencyRaw] = fields;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || Number.isNaN(Date.parse(`${day}T00:00:00Z`))) { rejected.push(`line ${lineNo} (bad day)`); continue; }
+      if (!slug || slug.length > 120) { rejected.push(`line ${lineNo} (bad link slug)`); continue; }
+      const cost = Number(costRaw);
+      if (!Number.isFinite(cost) || cost < 0) { rejected.push(`line ${lineNo} (bad cost)`); continue; }
+      if (!/^[A-Za-z]{3}$/.test(currencyRaw)) { rejected.push(`line ${lineNo} (bad currency)`); continue; }
+      await env.DB.prepare('INSERT OR REPLACE INTO tr_cost_daily(day,link_slug,source,cost_minor,currency) VALUES(?,?,?,?,?)')
+        .bind(day, slug, source.slice(0, 120), Math.round(cost * 100), currencyRaw.toUpperCase()).run();
+      imported++;
+    }
+    await log(env, identity, 'tracking_cost_import', { imported, rejected: rejected.length });
+    if (!imported && !rejected.length) throw new AdminError('Cost import: the CSV was empty.');
+    return `Cost import done: ${imported} ${imported === 1 ? 'row' : 'rows'} imported${rejected.length ? `; ${rejected.length} rejected — ${rejected.slice(0, 8).join('; ')}${rejected.length > 8 ? '; …' : ''}` : ''}.`;
+  }
+
+  if (action === 'tracking_refire_outgoing') {
+    const id = Number(text(form, 'id', 12));
+    if (!Number.isFinite(id) || id <= 0) throw new AdminError('Re-fire: missing queue row.');
+    const row = await env.DB.prepare('SELECT id, status FROM tr_postbacks_out WHERE id=?').bind(id).first<{ id: number; status: string }>();
+    if (!row) throw new AdminError('Re-fire: queue row not found.', 404);
+    await env.DB.prepare("UPDATE tr_postbacks_out SET status='queued', attempts=0 WHERE id=?").bind(id).run();
+    const { fireOutgoingRow } = await import('../tracking/outgoing.ts');
+    const result = await fireOutgoingRow(env, id);
+    const after = await env.DB.prepare('SELECT status FROM tr_postbacks_out WHERE id=?').bind(id).first<{ status: string }>();
+    await log(env, identity, 'tracking_refire_outgoing', { id, httpStatus: result.httpStatus, status: after?.status });
+    return result.ok
+      ? `Outgoing postback ${id} re-fired — HTTP ${result.httpStatus}, marked sent.`
+      : `Outgoing postback ${id} re-fired — HTTP ${result.httpStatus || 'no answer'}; it is ${after?.status || 'queued'} and the retry schedule continues.`;
+  }
+
+  if (action === 'tracking_variant_save' || action === 'tracking_variant_delete' || action === 'tracking_link_settings') {
+    const { mirrorVariants } = await import('../tracking/routing.ts');
+    const slug = text(form, 'slug', 120);
+    if (!slug) throw new AdminError('Choose a link first.');
+    const link = await env.DB.prepare('SELECT slug FROM links WHERE slug=? AND deleted_at IS NULL').bind(slug).first();
+    if (!link) throw new AdminError('Link not found.', 404);
+    if (action === 'tracking_link_settings') {
+      const safeUrl = text(form, 'safe_url', 2048).trim();
+      if (safeUrl && !/^https:\/\//.test(safeUrl)) throw new AdminError('Safe page URL must be an https URL (or blank for none).');
+      await env.DB.prepare('INSERT INTO tr_link_settings(slug,autoopt,safe_url) VALUES(?,?,?) ON CONFLICT(slug) DO UPDATE SET autoopt=excluded.autoopt, safe_url=excluded.safe_url')
+        .bind(slug, form.get('autoopt') === '1' ? 1 : 0, safeUrl).run();
+      await log(env, identity, 'tracking_link_settings', { slug });
+      return `Link settings saved for ${slug}.`;
+    }
+    if (action === 'tracking_variant_delete') {
+      const id = Number(text(form, 'id', 12));
+      await env.DB.prepare('DELETE FROM tr_link_variants WHERE id=? AND link_slug=?').bind(id, slug).run();
+      await mirrorVariants(env, slug);
+      await log(env, identity, 'tracking_variant_delete', { slug, id });
+      return `Variant ${id} deleted from ${slug}.`;
+    }
+    const destUrl = text(form, 'dest_url', 2048).trim();
+    if (!/^https:\/\//.test(destUrl)) throw new AdminError('Variant destination must be an https URL.');
+    const weight = Number(text(form, 'weight', 6));
+    if (!Number.isFinite(weight) || weight < 0 || weight > 100) throw new AdminError('Weight: use 0–100.');
+    const capClicks = Math.max(0, Math.trunc(Number(text(form, 'cap_clicks_day', 10)) || 0));
+    const capConv = Math.max(0, Math.trunc(Number(text(form, 'cap_conv_day', 10)) || 0));
+    const chainOrder = Math.trunc(Number(text(form, 'chain_order', 6)) || 0);
+    const schedule = text(form, 'schedule', 500).trim();
+    if (schedule) {
+      try {
+        const parsed: unknown = JSON.parse(schedule);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('object expected');
+      } catch { throw new AdminError('Schedule: enter valid JSON like {"days":[1,2,3,4,5],"start":"09:00","end":"17:00","tz":"UTC"} (or leave blank for always on).'); }
+    }
+    const note = text(form, 'note', 200);
+    const active = form.get('active') === '1' ? 1 : 0;
+    const locked = form.get('locked') === '1' ? 1 : 0;
+    const id = Number(text(form, 'id', 12));
+    const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    if (id > 0) {
+      await env.DB.prepare('UPDATE tr_link_variants SET dest_url=?, weight=?, chain_order=?, active=?, cap_clicks_day=?, cap_conv_day=?, schedule=?, note=?, locked=?, updated_at=? WHERE id=? AND link_slug=?')
+        .bind(destUrl, Math.trunc(weight), chainOrder, active, capClicks, capConv, schedule, note, locked, now, id, slug).run();
+    } else {
+      await env.DB.prepare('INSERT INTO tr_link_variants(link_slug,dest_url,weight,chain_order,active,cap_clicks_day,cap_conv_day,schedule,note,locked,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)')
+        .bind(slug, destUrl, Math.trunc(weight), chainOrder, active, capClicks, capConv, schedule, note, locked, now, now).run();
+    }
+    await mirrorVariants(env, slug);
+    await log(env, identity, 'tracking_variant_save', { slug, id: id || 'new', destUrl });
+    return `Variant saved for ${slug}.`;
+  }
+
   throw new AdminError('Unknown tracking action.');
 }

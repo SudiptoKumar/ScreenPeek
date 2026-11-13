@@ -4,7 +4,7 @@ import { ingestPostback } from '../../../lib/tracking/postback';
 
 export const prerender = false;
 
-async function handle({ request, params }: Parameters<APIRoute>[0]): Promise<Response> {
+async function handle({ request, params, locals }: Parameters<APIRoute>[0]): Promise<Response> {
   const network = String(params.network || '').toLowerCase();
   if (!/^[a-z0-9_-]{1,32}$/.test(network)) return new Response('Not found', { status: 404 });
   const collected = new URLSearchParams(new URL(request.url).searchParams);
@@ -20,7 +20,10 @@ async function handle({ request, params }: Parameters<APIRoute>[0]): Promise<Res
       }
     } catch { /* an unreadable body still gets its query params processed */ }
   }
-  const outcome = await ingestPostback(env as unknown as { DB: D1Database } & Record<string, unknown>, network, collected);
+  // Outgoing postbacks (F23) fire through waitUntil so they never delay
+  // this response (gate G23.2).
+  const background = (promise: Promise<unknown>) => { try { locals.cfContext?.waitUntil(promise); } catch { /* no context in tests */ } };
+  const outcome = await ingestPostback(Object.assign(Object.create(null), env, { background }) as { DB: D1Database } & Record<string, unknown>, network, collected);
   return new Response(outcome.body, { status: outcome.http, headers: { 'Cache-Control': 'no-store' } });
 }
 

@@ -25,6 +25,7 @@ export const TRACKING_DEFAULTS: Record<string, string> = {
   tracking_status_map: '{}',
   tracking_quality_weights: '{}',
   tracking_quality_digest: '0',
+  tracking_quality_gate_enabled: '0',
   tracking_postback_lenient: '0',
   tracking_degraded: '0',
   tracking_tier1_countries: 'US,GB,CA,AU',
@@ -61,6 +62,7 @@ export interface TrackingConfig {
   statusMapJson: string;
   qualityWeightsJson: string;
   qualityDigest: boolean;
+  qualityGateEnabled: boolean;
   postbackLenient: boolean;
   degraded: boolean;
   tier1Countries: string[];
@@ -105,6 +107,7 @@ export function parseTrackingConfig(rows: Record<string, string>): TrackingConfi
     statusMapJson: get('tracking_status_map') || '{}',
     qualityWeightsJson: get('tracking_quality_weights') || '{}',
     qualityDigest: flag(get('tracking_quality_digest')),
+    qualityGateEnabled: flag(get('tracking_quality_gate_enabled')),
     postbackLenient: flag(get('tracking_postback_lenient')),
     degraded: flag(get('tracking_degraded')),
     tier1Countries: get('tracking_tier1_countries').split(',').map(part => part.trim().toUpperCase()).filter(Boolean),

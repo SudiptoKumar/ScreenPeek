@@ -35,7 +35,7 @@ export function payoutToMinor(raw: string | null): number {
 const SECRET_KEYS = ['key', 'secret', 'token'];
 
 export async function ingestPostback(
-  env: { DB: D1Database } & Record<string, unknown>,
+  env: { DB: D1Database; CONFIG?: KVNamespace } & Record<string, unknown>,
   network: string,
   params: URLSearchParams,
 ): Promise<PostbackOutcome> {
@@ -76,25 +76,84 @@ export async function ingestPostback(
   const status = mapStatus(statusRaw, cfg.statusMapJson);
   const payoutMinor = payoutToMinor(params.get('payout'));
   const currency = (params.get('currency') || networkCfg.currency_default || 'USD').toUpperCase().slice(0, 3);
-  // Attribution fields (country, device, page) join via click_id at read
-  // time — the conversions table stays lean by design (v3 schema).
-  const insert = await env.DB.prepare(
-    `INSERT OR IGNORE INTO tr_conversions(click_id,network,event,payout_minor,currency,status_mapped,status_raw,txid,is_test)
-     VALUES(?,?,?,?,?,?,?,?,?)`,
-  ).bind(clickId, network, event, payoutMinor, currency, status, statusRaw, txid, Number(click.is_test || 0)).run();
-  const created = (insert.meta?.changes ?? 0) > 0;
+  const created = await recordConversion(env, {
+    click, network, event, payoutMinor, currency, status, statusRaw, txid, source: 's2s',
+    attributionWindowDays: cfg.attributionWindowDays,
+  });
   if (created) {
-    const day = String(click.ts || '').slice(0, 10);
-    if (day) {
-      await env.DB.prepare(
-        `INSERT INTO tr_click_daily(day,slug,country,device_type,dest_host,currency,conversions,revenue_minor) VALUES(?,?,?,?,?,?,1,?)
-         ON CONFLICT(day,slug,country,device_type,dest_host,currency) DO UPDATE SET conversions=conversions+1, revenue_minor=revenue_minor+excluded.revenue_minor`,
-      ).bind(day, String(click.slug || ''), String(click.country || ''), String(click.device_type || ''),
-        String(click.dest_host || ''), currency, payoutMinor).run();
-    }
     await logRaw('matched');
     return { http: 200, result: 'matched', body: 'OK' };
   }
   await logRaw('duplicate');
   return { http: 200, result: 'duplicate', body: 'OK' };
+}
+
+/**
+ * Shared conversion writer (F8 S2S + F22 pixel): dedupe on
+ * (click_id, txid, event); on first insert only, the daily aggregate
+ * gains the conversion + revenue (keyed by the CLICK's day) and the
+ * variant conversion counter moves. Returns true when a row was created.
+ * Attribution fields (country, device, page) join via click_id at read
+ * time — the conversions table stays lean by design (v3 schema).
+ */
+export async function recordConversion(
+  env: { DB: D1Database; CONFIG?: KVNamespace; background?: (promise: Promise<unknown>) => void },
+  input: {
+    click: Record<string, unknown>;
+    network: string;
+    event: string;
+    payoutMinor: number;
+    currency: string;
+    status: string;
+    statusRaw: string;
+    txid: string;
+    source: string;
+    attributionWindowDays?: number;
+  },
+): Promise<boolean> {
+  const { click } = input;
+  // F24 attribution window: a conversion arriving after the window
+  // closes is stored as 'late' (the raw status is kept on the row) and
+  // excluded from EPC and auto-optimisation.
+  let status = input.status;
+  if (input.attributionWindowDays) {
+    const clickTs = Date.parse(`${String(click.ts || '').replace(' ', 'T')}Z`);
+    if (Number.isFinite(clickTs) && Date.now() - clickTs > input.attributionWindowDays * 86_400_000) status = 'late';
+  }
+  const insert = await env.DB.prepare(
+    `INSERT OR IGNORE INTO tr_conversions(click_id,network,event,payout_minor,currency,status_mapped,status_raw,txid,is_test,source)
+     VALUES(?,?,?,?,?,?,?,?,?,?)`,
+  ).bind(String(click.click_id || ''), input.network, input.event, input.payoutMinor, input.currency,
+    status, input.statusRaw, input.txid, Number(click.is_test || 0), input.source).run();
+  const created = (insert.meta?.changes ?? 0) > 0;
+  if (!created) return false;
+  if (env.CONFIG && click.variant_id != null) {
+    const { bumpVariantCounter } = await import('./routing.ts');
+    await bumpVariantCounter({ CONFIG: env.CONFIG }, 'conversions', Number(click.variant_id), new Date());
+  }
+  const day = String(click.ts || '').slice(0, 10);
+  if (day) {
+    await env.DB.prepare(
+      `INSERT INTO tr_click_daily(day,slug,country,device_type,dest_host,currency,conversions,revenue_minor) VALUES(?,?,?,?,?,?,1,?)
+       ON CONFLICT(day,slug,country,device_type,dest_host,currency) DO UPDATE SET conversions=conversions+1, revenue_minor=revenue_minor+excluded.revenue_minor`,
+    ).bind(day, String(click.slug || ''), String(click.country || ''), String(click.device_type || ''),
+      String(click.dest_host || ''), input.currency, input.payoutMinor).run();
+  }
+  // F23: queue the outgoing postback, then fire its first attempt in
+  // the background — the incoming response is never delayed by it
+  // (gate G23.2). If the background fire is lost, the row stays queued
+  // and the workflow retry step picks it up.
+  try {
+    const { queueOutgoingForConversion, fireOutgoingRow } = await import('./outgoing.ts');
+    const conversion = await env.DB.prepare('SELECT id FROM tr_conversions WHERE click_id=? AND txid=? AND event=?')
+      .bind(String(click.click_id || ''), input.txid, input.event).first<{ id: number }>();
+    if (conversion) {
+      const rowId = await queueOutgoingForConversion(env, conversion.id, click, input);
+      if (rowId) {
+        const fire = fireOutgoingRow(env, rowId).catch(() => {});
+        if (typeof env.background === 'function') env.background(fire);
+      }
+    }
+  } catch { /* outgoing postbacks are best-effort */ }
+  return true;
 }
