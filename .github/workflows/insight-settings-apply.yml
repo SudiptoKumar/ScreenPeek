@@ -1,0 +1,55 @@
+name: Insight settings apply (manual)
+
+# Manual, owner-requested best-solution settings:
+#   tracking_consent_mode    -> off      (collect every visitor, Tier-2 included)
+#   tracking_alert_channels  -> telegram (alerts + weekly report via the money bot)
+# Each value is written to live D1 and mirrored to its config KV key,
+# then read back from both stores. A go-live rebuild afterwards bakes
+# the consent mode into the static pages.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    if: vars.SCREENPEEK_SYNC_ENABLED == '1' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+      KV_NAMESPACE_ID: ${{ secrets.KV_NAMESPACE_ID }}
+    steps:
+      - name: Apply Insight settings in D1 and KV mirror
+        run: |
+          python3 - <<'PYEOF'
+          import json, os, urllib.request, urllib.error, urllib.parse
+          acct = os.environ['CLOUDFLARE_ACCOUNT_ID']; token = os.environ['CLOUDFLARE_API_TOKEN']
+          SETTINGS = {'tracking_consent_mode': 'off', 'tracking_alert_channels': 'telegram'}
+          def call(method, url, body=None, content_type='application/json'):
+              data = body
+              if body is not None and content_type == 'application/json':
+                  data = json.dumps(body).encode()
+              r = urllib.request.Request(url, data=data, method=method)
+              r.add_header('Authorization', 'Bearer ' + token); r.add_header('Content-Type', content_type)
+              try:
+                  with urllib.request.urlopen(r) as resp: return resp.status, resp.read().decode('utf-8', 'replace')
+              except urllib.error.HTTPError as e:
+                  return e.code, e.read().decode('utf-8', 'replace')[:300]
+          d1 = f"https://api.cloudflare.com/client/v4/accounts/{acct}/d1/database/{os.environ['D1_DATABASE_ID']}/query"
+          for key, value in SETTINGS.items():
+              status, text = call('POST', d1, {'sql': f"UPDATE config SET value='{value}' WHERE key='{key}'"})
+              print(f'd1 update {key}:', status)
+              status, text = call('POST', d1, {'sql': f"SELECT value FROM config WHERE key='{key}'"})
+              print(f'd1 readback {key}:', status, text[:160])
+              kv_key = urllib.parse.quote(f'config:{key}', safe='')
+              kv_url = f"https://api.cloudflare.com/client/v4/accounts/{acct}/storage/kv/namespaces/{os.environ['KV_NAMESPACE_ID']}/values/{kv_key}"
+              status, text = call('PUT', kv_url, body=value.encode(), content_type='text/plain')
+              print(f'kv put {key}:', status)
+              status, text = call('GET', kv_url)
+              print(f'kv readback {key}:', status, text[:60])
+          PYEOF
