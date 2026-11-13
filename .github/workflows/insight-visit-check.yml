@@ -1,0 +1,50 @@
+name: Insight visit check (manual)
+
+# Manual: prints the newest Insight rows (sessions, events, clicks)
+# from the live database so a real visit can be verified end to end.
+# Read-only; changes nothing.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    if: vars.SCREENPEEK_SYNC_ENABLED == '1' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+    steps:
+      - name: Query newest Insight rows from live D1
+        run: |
+          python3 - <<'PYEOF'
+          import json, os, urllib.request, urllib.error
+          acct = os.environ['CLOUDFLARE_ACCOUNT_ID']; token = os.environ['CLOUDFLARE_API_TOKEN']
+          def query(sql):
+              body = json.dumps({'sql': sql}).encode()
+              r = urllib.request.Request(f"https://api.cloudflare.com/client/v4/accounts/{acct}/d1/database/{os.environ['D1_DATABASE_ID']}/query", data=body, method='POST')
+              r.add_header('Authorization', 'Bearer ' + token); r.add_header('Content-Type', 'application/json')
+              try:
+                  with urllib.request.urlopen(r) as resp: out = json.load(resp)
+              except urllib.error.HTTPError as e:
+                  return {'success': False, 'error': f"HTTP {e.code}: " + e.read().decode('utf-8', 'replace')[:300]}
+              if not out.get('success'): return {'success': False, 'error': str(out.get('errors'))[:300]}
+              return {'success': True, 'rows': (out.get('result') or [{}])[0].get('results') or []}
+          for label, sql in [
+              ('counts', "SELECT (SELECT COUNT(*) FROM tr_sessions WHERE date(started_at)=date('now')) AS sessions_today, (SELECT COUNT(*) FROM tr_events WHERE date(ts_received)=date('now')) AS events_today, (SELECT COUNT(*) FROM tr_clicks WHERE date(ts)=date('now')) AS clicks_today, (SELECT value FROM config WHERE key='tracking_enabled') AS tracking_enabled"),
+              ('sessions', "SELECT * FROM tr_sessions ORDER BY started_at DESC LIMIT 6"),
+              ('events', "SELECT ts_received, type, page_url, page_type, payload_json FROM tr_events ORDER BY id DESC LIMIT 8"),
+              ('clicks', "SELECT * FROM tr_clicks ORDER BY id DESC LIMIT 6"),
+          ]:
+              result = query(sql)
+              print(f"== {label}: success={result['success']}")
+              if not result['success']:
+                  print('  error:', result['error']); continue
+              for row in result['rows']:
+                  print(' ', json.dumps(row)[:1500])
+          PYEOF
