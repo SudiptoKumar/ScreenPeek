@@ -196,3 +196,9 @@ body[data-page-type="home"] main{max-width:1340px}
   .site-header.search-open .searchbox{display:flex;position:absolute;top:calc(100% + 8px);left:12px;right:12px;width:auto;z-index:30;background:var(--panel)}
   .searchbtn{display:grid}
 }
+
+/* Designated Smartlink placements (detail button + watch sponsored row):
+   always labelled Sponsored, always routed through /go/ so clicks count. */
+.ad-tag{font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--accent);border:1px solid var(--accent);border-radius:999px;padding:2px 7px;white-space:nowrap}
+.detail-actions .ad-tag{margin-left:2px}
+.sponsored-row{border-color:var(--accent)}

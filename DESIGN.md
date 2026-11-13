@@ -81,7 +81,12 @@ third-party font requests anywhere.
   per visit (detail page only), one sticky bar, and each global format once
   (in-page push may stack one partner). Networks set no per-page cap for
   banner/native units; the stack-of-three and one-popunder limits are ours
-  and are not to be exceeded.
+  and are not to be exceeded. The Smartlink has exactly two designated
+  placements, both labelled Sponsored and routed through `/go/` so clicks
+  are tracked: a "Watch Now" button in the detail hero actions and a
+  sponsored row above the provider groups on the watch page — each renders
+  only while the `smartlink-main` managed link is active. No other button
+  or link may be wired to the Smartlink.
 - **Trailer**: the detail page shows a 16:9 facade (own image, play badge)
   linking to the trailer page; the trailer page shows the same facade with a
   red play disc and loads the YouTube iframe only on click. No iframe and no

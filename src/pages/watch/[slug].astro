@@ -5,10 +5,16 @@ import AdSlot from '../../components/AdSlot.astro';
 import AdStack from '../../components/AdStack.astro';
 import ProviderRow from '../../components/ProviderRow.astro';
 import { loadWatchPage } from '../../lib/watch';
+import { readLink, linkActive } from '../../lib/links';
 import { countryCookie, countryNames, supportedCountries } from '../../lib/geo';
 import { mediaUrl } from '../../lib/media';
 import { breadcrumbs, siteOrigin } from '../../lib/seo';
 const data = await loadWatchPage(env.DB, env.CONFIG, Astro.params.slug || '', Astro.request);
+// The one designated Smartlink placement on the watch page: a sponsored
+// row above the provider groups, shown only while the managed link is
+// active in the panel (Links -> smartlink-main). Popunder stays off here.
+const smartlink = await readLink(env.CONFIG, env.DB, 'smartlink-main').catch(() => null);
+const smartlinkActive = smartlink ? linkActive(smartlink) : false;
 Astro.response.status = data.status;
 Astro.response.headers.set('Cache-Control', data.cacheControl);
 if (data.status === 200) Astro.response.headers.append('Set-Cookie', countryCookie(data.country));
@@ -24,6 +30,7 @@ const groups = [{ name: 'Stream', values: ['stream'] }, { name: 'Free', values: 
     <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a><span>/</span><a href={`/${title.type === 'tv' ? 'tv' : 'movie'}/${title.slug}/`}>{title.title}</a><span>/</span><span>Where to Watch</span></nav>
     <header class="watch-heading">{poster && <img src={poster} width="62" height="93" decoding="async" fetchpriority="high" alt={`${title.title} poster`} />}<div><h1>Where to watch {title.title} in {name}</h1></div></header>
     <nav class="country-switcher" aria-label="Watch country">{supportedCountries.map(country => <a href={`?country=${country}`} aria-current={country === data.country ? 'page' : undefined}>{country === 'GB' ? 'UK' : country}</a>)}</nav>
+    {smartlinkActive && <a class="provider-row sponsored-row" href="/go/smartlink-main/" rel="sponsored nofollow noopener" target="_blank" data-no-popunder><strong>Watch now</strong><span class="ad-tag">Sponsored</span><span>Visit link ↗</span></a>}
     {data.providers.length ? <div class="provider-groups">{groups.map(group => {
       const rows = data.providers.filter(provider => group.values.includes(provider.offer_type));
       return rows.length > 0 && <section><h2>{group.name}</h2><ul>{rows.map(provider => <li><ProviderRow provider={provider} mediaBase={env.R2_PUBLIC_BASE} /></li>)}</ul></section>;

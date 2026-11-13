@@ -9,6 +9,7 @@ import VerdictWidget from './VerdictWidget.astro';
 import { parseJsonArray } from '../lib/detail';
 import type { TitlePageData } from '../lib/detail';
 import { mediaUrl } from '../lib/media';
+import { readLink, linkActive } from '../lib/links';
 import { siteOrigin, titleSchema } from '../lib/seo';
 import { env } from 'cloudflare:workers';
 interface Props { data: TitlePageData; mediaBase?: string; }
@@ -20,6 +21,11 @@ const kind = title?.type === 'tv' ? 'TV series' : 'Movie';
 const indexUrl = title?.type === 'tv' ? '/series/' : '/movies/';
 const watchUrl = `/watch/${encodeURIComponent(title?.slug || '')}/`;
 const trailerUrl = `/trailer/${encodeURIComponent(title?.slug || '')}/`;
+// The one designated Smartlink placement on the detail page: a clearly
+// labelled Sponsored button, rendered only while the managed link is
+// active in the panel (Links -> smartlink-main).
+const smartlink = await readLink(env.CONFIG, env.DB, 'smartlink-main').catch(() => null);
+const smartlinkActive = smartlink ? linkActive(smartlink) : false;
 const poster = mediaUrl(title?.poster_r2, mediaBase, 500);
 const posterSmall = mediaUrl(title?.poster_r2, mediaBase, 185);
 const savedPoster = mediaUrl(title?.poster_r2, mediaBase, 185);
@@ -69,7 +75,7 @@ const boxOffice = title?.type === 'movie' && ((title.budget !== null && title.bu
               <span>{title.year ?? 'Year TBA'}</span>{runtime && <span>{runtime}</span>}<span>{kind}</span>{title.status && <span>{title.status}</span>}</p>
             {(directors.length > 0 || cast.length > 0) && <p class="credits-line">{directors.length > 0 && <span>{title.type === 'tv' ? 'Created by' : 'Directed by'} <strong>{directors.map(person => person.name).join(', ')}</strong></span>}{directors.length > 0 && cast.length > 0 && <span aria-hidden="true"> · </span>}{cast.length > 0 && <span>Starring <strong>{cast.slice(0, 3).map(person => person.name).join(', ')}</strong></span>}</p>}
             {data.genres.length > 0 && <div class="genre-chips detail-genres" aria-label="Genres">{data.genres.map(genre => <a href={`/genre/${encodeURIComponent(genre.slug)}/`}>{genre.name}</a>)}</div>}
-            <div class="detail-actions" data-detail-section="actions"><a class="button primary" href={watchUrl}>Where to Watch</a><a class="button hero-glass" href={trailerUrl}>Trailer</a></div>
+            <div class="detail-actions" data-detail-section="actions"><a class="button primary" href={watchUrl}>Where to Watch</a><a class="button hero-glass" href={trailerUrl}>Trailer</a>{smartlinkActive && <a class="button hero-glass" href="/go/smartlink-main/" rel="sponsored nofollow noopener" target="_blank">Watch Now <span class="ad-tag">Sponsored</span></a>}</div>
           </header>
         </div>
       </section>
