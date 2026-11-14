@@ -135,3 +135,12 @@ Every public page must stay under 100,000 bytes of own first-screen resources
 at 360×800 with cache off (CI gate, `npm run check:performance`); Lighthouse
 mobile performance target ≥ 90. Images are served from R2 as WebP; posters
 exist at w185 and w500 only, backdrops at w300.
+
+Admin update (2026-11-14, Claude redesign merged with the owner's rules): the module
+nav and the More sheet are grouped — Overview / Money / Website content / System.
+The dashboard opens with a today strip (Earned today · Link clicks today · Last sync
+with a status dot), then the attention strip, then The Vault — the earnings card
+carries a ticket-stub tear line (dashed, notched) between the balance and its ledger.
+The Ads module has an All / On / Off / Empty slot filter. Tables in Links, Sync and
+Recent changes carry data-labels like Tracking's. The panel stays on the owner's
+dark palette and data-only rule: no module ledes, the person chip stays icon-only.
