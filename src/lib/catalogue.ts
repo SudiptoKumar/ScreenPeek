@@ -1,8 +1,9 @@
 import { manualTitles } from './home-config.ts';
-export interface HeroTitle extends TitleCard { backdrop_r2: string | null; overview: string | null; vote_count: number | null; }
+export interface HeroTitle extends TitleCard { backdrop_r2: string | null; overview: string | null; genres: string; }
 export interface TitleCard {
   id: number; type: 'movie' | 'tv'; slug: string; title: string; year: number | null;
   poster_r2: string | null; poster_color: string | null; vote_average: number | null;
+  vote_count: number | null; runtime_min: number | null;
   views: number; updated_at: string; release_date: string | null;
 }
 export interface ListFilters {
@@ -12,7 +13,7 @@ export interface ListFilters {
   collection?: string; language?: string; mode?: 'new' | 'top10' | 'upcoming';
 }
 export interface CataloguePage { titles: TitleCard[]; total: number; page: number; pages: number; }
-const fields = 't.id,t.type,t.slug,t.title,t.year,t.poster_r2,t.poster_color,t.vote_average,t.views,t.updated_at,t.release_date';
+const fields = 't.id,t.type,t.slug,t.title,t.year,t.poster_r2,t.poster_color,t.vote_average,t.vote_count,t.runtime_min,t.views,t.updated_at,t.release_date';
 const visible = 't.hidden=0 AND t.deleted=0 AND t.deleted_at IS NULL';
 const validSorts = ['popular', 'newest', 'rating', 'release'] as const;
 
@@ -81,26 +82,46 @@ export async function homeTitles(db: D1Database, includeUngated = false) {
   const where = visible + (includeUngated ? '' : ' AND t.quality_gate=1');
   const query = async (condition: string, order: string, limit: number) =>
     (await db.prepare(`SELECT ${fields} FROM titles t WHERE ${where} ${condition} ORDER BY ${order},t.id DESC LIMIT ?`).bind(limit).all<TitleCard>()).results;
-  const [trending, top10, toprated, movies, series, upcoming, genres] = await Promise.all([
+  const [trending, top10, toprated, movies, series, upcoming, genresRaw] = await Promise.all([
     query('', "CASE WHEN t.pinned=1 AND (t.pin_starts_at IS NULL OR datetime(t.pin_starts_at)<=datetime('now')) AND (t.pin_ends_at IS NULL OR datetime(t.pin_ends_at)>datetime('now')) THEN 1 ELSE 0 END DESC,t.popularity DESC", 6), query('', 't.popularity DESC', 10),
     query("AND t.type='movie' AND t.vote_count>=200", 't.vote_average DESC,t.vote_count DESC', 10),
     query("AND t.type='movie'", 't.added_at DESC', 6), query("AND t.type='tv'", 't.added_at DESC', 6),
-    query("AND t.release_date>date('now')", 't.release_date ASC', 6),
+    query("AND t.release_date>date('now')", 't.release_date ASC', 8),
     db.prepare(`SELECT g.slug,COALESCE(NULLIF(o.display_name,''),g.name) name,g.title_count FROM genres g LEFT JOIN taxonomy_overrides o ON o.kind='genre' AND o.slug=g.slug AND o.deleted_at IS NULL WHERE g.title_count>0 AND COALESCE(o.hidden,0)=0 ORDER BY COALESCE(o.ord,0),g.title_count DESC,name LIMIT 50`).all<{ slug: string; name: string; title_count: number }>(),
   ]);
-  // 6+6+6+6 poster cards maximum; Top10 is a text-only ranked list.
   const shelf = async (pattern: string, order: string) =>
     (await db.prepare(`SELECT ${fields} FROM titles t JOIN providers p ON p.title_id=t.id AND p.title_type=t.type WHERE ${where} AND p.country='US' AND p.offer_type='stream' AND p.provider_name LIKE ? GROUP BY t.id ORDER BY ${order},t.id DESC LIMIT 10`).bind(pattern).all<TitleCard>()).results;
   const pinnedFirst = "CASE WHEN t.pinned=1 AND (t.pin_starts_at IS NULL OR datetime(t.pin_starts_at)<=datetime('now')) AND (t.pin_ends_at IS NULL OR datetime(t.pin_ends_at)>datetime('now')) THEN 1 ELSE 0 END DESC,t.popularity DESC";
-  const [trendingMovies, trendingSeries, netflixNew, netflixTrend, primeNew, appleNew, heroRows] = await Promise.all([
+  const [trendingMovies, trendingSeries, gems, netflix, prime, apple, recent, heroRows] = await Promise.all([
     query("AND t.type='movie'", 't.popularity DESC', 10),
     query("AND t.type='tv'", 't.popularity DESC', 10),
-    shelf('Netflix', 't.added_at DESC'), shelf('Netflix', 't.popularity DESC'),
-    shelf('Amazon Prime%', 't.added_at DESC'), shelf('Apple TV%', 't.added_at DESC'),
-    db.prepare(`SELECT ${fields},t.backdrop_r2,t.overview,t.vote_count FROM titles t WHERE ${where} ORDER BY ${pinnedFirst},t.id DESC LIMIT 1`).all<HeroTitle>(),
+    query("AND t.vote_average>=7.5 AND t.vote_count>=200 AND t.vote_count<=2000", 't.vote_average DESC,t.vote_count ASC', 10),
+    shelf('Netflix', 't.popularity DESC'), shelf('Amazon Prime%', 't.popularity DESC'), shelf('Apple TV%', 't.popularity DESC'),
+    query('', 't.added_at DESC', 10),
+    db.prepare(`SELECT ${fields},t.backdrop_r2,t.overview,t.genres FROM titles t WHERE ${where} ORDER BY ${pinnedFirst},t.id DESC LIMIT 1`).all<HeroTitle>(),
   ]);
-  return { trending, top10, toprated, movies, series, upcoming, genres: genres.results,
-    hero: heroRows.results[0] ?? null, trendingMovies, trendingSeries, netflixNew, netflixTrend, primeNew, appleNew };
+  const hero = heroRows.results[0] ?? null;
+  // Section-level deduplication (redesign mandate): the hero title and every
+  // rendered shelf title appear at most once on the homepage. The raw
+  // `trending` list stays untouched — it feeds the item-list schema and the
+  // admin manual-section splits.
+  const seen = new Set<string>();
+  if (hero) seen.add(`${hero.type}:${hero.id}`);
+  const take = (list: TitleCard[]) => list.filter(title => { const key = `${title.type}:${title.id}`; if (seen.has(key)) return false; seen.add(key); return true; });
+  const top10D = take(top10), trendingMoviesD = take(trendingMovies), trendingSeriesD = take(trendingSeries),
+    gemsD = take(gems), upcomingD = take(upcoming), netflixD = take(netflix), primeD = take(prime),
+    appleD = take(apple), recentD = take(recent), moviesD = take(movies), seriesD = take(series), topratedD = take(toprated);
+  // A representative poster per genre (its most popular title) for poster-led tiles.
+  const genres = genresRaw.results.map(row => ({ ...row, poster_r2: null as string | null }));
+  if (genres.length) {
+    const top = genres.slice(0, 12);
+    const marks = top.map(() => '?').join(',');
+    const posters = await db.prepare(`SELECT genre_slug,poster_r2 FROM (SELECT tg.genre_slug,t.poster_r2,ROW_NUMBER() OVER (PARTITION BY tg.genre_slug ORDER BY t.popularity DESC) rn FROM title_genres tg JOIN titles t ON t.id=tg.title_id AND t.type=tg.title_type WHERE tg.genre_slug IN (${marks}) AND t.poster_r2 IS NOT NULL AND ${where}) WHERE rn=1`).bind(...top.map(genre => genre.slug)).all<{ genre_slug: string; poster_r2: string }>();
+    const bySlug = new Map(posters.results.map(row => [row.genre_slug, row.poster_r2]));
+    for (const genre of genres) genre.poster_r2 = bySlug.get(genre.slug) ?? null;
+  }
+  return { trending, top10: top10D, toprated: topratedD, movies: moviesD, series: seriesD, upcoming: upcomingD, genres,
+    hero, trendingMovies: trendingMoviesD, trendingSeries: trendingSeriesD, gems: gemsD, netflix: netflixD, prime: primeD, apple: appleD, recent: recentD };
 }
 
 /** Every genre that has titles, for the /genres/ index page (no cap). */

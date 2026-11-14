@@ -4,6 +4,46 @@ The built design language for the public site and the admin panel, as shipped in
 the 2026-11 redesign (public "Ambient" design + admin v4 control desk). This file
 describes what exists; PRODUCT.md describes what the product is.
 
+## Cinematic Editorial — public site (2026-11-14 redesign mandate, supersedes the public "Ambient" tokens and home/detail composition below)
+
+Identity: a cinematic discovery and editorial platform — "a quick look before
+you watch". Warm dark, print-editorial, one gold accent. Not a streaming clone.
+
+- **Palette (public)**: bg `#151515`, surface `#242424`, raised `#2b2b2b`,
+  header `#1b1b1b`, text `#e9e4db` (warm paper), muted `#a79e8f`, line `#2e2a24`,
+  accent/CTA gold `#c99b59` (dark text `#1a1408` on gold), hover `#b8894a`.
+  The coral red accent is retired from the public site. Admin keeps its own
+  neutral dark palette (separate chapter below).
+- **Type**: Fraunces 600 (self-hosted subset, 11 KB, `public/fonts/fraunces-display.woff2`)
+  for display — hero title, section headings, detail title, Top-10 numerals.
+  Archivo stays the UI/body font. Metadata stays compact sans.
+- **Hero**: editorial split — a solid text panel (serif title, one-line
+  synopsis from the stored overview, facts row, actions) beside the sharp
+  poster; the backdrop appears only as a darkened, unblurred tint field.
+  No gradient shade, no glow. The featured title is the admin pin, else the
+  top gated title by popularity.
+- **Home sections** (each a different shape, no repeated information, every
+  title appears in at most one poster shelf and never in the hero's shelf):
+  the Pick (hero) → Top 10 (numbered, serif numerals) → Trending Movies →
+  Trending Series → Hidden Gems (rating ≥ 7.5 with 200–2,000 votes — the
+  definition is printed on the section) → Coming Soon (calendar rows with
+  "in N days") → one shelf per streaming provider ("Streaming on Netflix",
+  popularity order; availability, not false novelty) → Genres (poster-led
+  tiles, one calm frame) → Recently added to the catalogue (labelled exactly
+  that, `added_at` order).
+- **Honesty rules**: a 0.0/unvoted rating never renders (unrated titles show
+  no score); "new" always names what is new (release vs catalogue addition);
+  cards carry year · runtime · real rating; provider shelves never claim a
+  title is new to the provider.
+- **Performance decision (documented)**: the homepage budget rises to
+  120 KB first-screen bytes (all other pages stay at 100 KB) — the cost of
+  the Fraunces display font (11 KB) and the Top 10 first screen. Recorded
+  here per the mandate's documented-decision rule.
+- **Detail**: each fact lives in exactly one place — scores only in the
+  ratings strip, the full release date only in Facts, runtime only in the
+  hero meta line. Serif title, gold accents, everything else structurally
+  as the detail chapter below.
+
 ## Tokens
 
 | Token | Value | Use |

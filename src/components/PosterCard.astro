@@ -2,12 +2,14 @@
 import type { TitleCard } from '../lib/catalogue';
 import { titleUrl } from '../lib/catalogue';
 import { mediaUrl } from '../lib/media';
-import { rating } from '../lib/format';
+import { rating, runtimeLabel } from '../lib/format';
 interface Props { title: TitleCard; mediaBase?: string; eager?: boolean; annotation?: string; }
 const { title, mediaBase, eager = false, annotation } = Astro.props;
 const image = mediaUrl(title.poster_r2, mediaBase, 185);
 const color = /^#[a-f\d]{6}$/i.test(title.poster_color || '') ? title.poster_color! : '#20202B';
-const score = title.vote_average === null ? 'Unrated' : `TMDb rating ${title.vote_average.toFixed(1)} out of 10`;
+const rated = title.vote_average !== null && title.vote_average > 0;
+const score = rated ? `TMDb rating ${title.vote_average!.toFixed(1)} out of 10` : 'Unrated';
+const runtime = runtimeLabel(title.runtime_min);
 ---
 <div class="poster-item"><a class="poster-card" data-poster-card href={titleUrl(title)}>
   <div class="poster-frame" style={`--poster-color:${color}`}>
@@ -18,10 +20,10 @@ const score = title.vote_average === null ? 'Unrated' : `TMDb rating ${title.vot
         <span class="placeholder-title">{title.title}</span><span class="placeholder-label">Poster unavailable</span>
       </div>}
     {!eager && image && <noscript><img src={image} width="185" height="278" alt={`${title.title} poster`} loading="lazy" decoding="async" /></noscript>}
-    <span class="poster-score" aria-label={score} title={score}>{rating(title.vote_average)}</span>
+    {rated && <span class="poster-score" aria-label={score} title={score}>{rating(title.vote_average)}</span>}
     <span class="poster-type">{title.type === 'movie' ? 'MOVIE' : 'TV'}</span>
   </div>
   <h3 class="poster-title">{title.title}</h3>
   {annotation && <p class="poster-credit" data-credit-label>{annotation}</p>}
-  <p class="poster-meta">{title.year ?? 'Year TBA'} <span aria-hidden="true">·</span> <span>TMDb</span></p>
+  <p class="poster-meta">{title.year ?? 'Year TBA'}{runtime && <> <span aria-hidden="true">·</span> {runtime}</>}</p>
 </a></div>

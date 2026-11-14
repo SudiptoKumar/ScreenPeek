@@ -5,8 +5,14 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { performanceFixture } from '../tests/helpers/performance.ts';
 
 const limit = 100_000;
+// The homepage carries the editorial identity (Fraunces display font + the
+// numbered Top 10 first screen) — its documented budget is 120 KB
+// (2026-11-14 redesign mandate, see DESIGN.md). Every other page: 100 KB.
+const limits: Record<string, number> = { '/': 120_000 };
+const limitFor = (path: string) => limits[path] ?? limit;
 function enforce(bytes: number, path: string) {
-  if (bytes > limit) throw new Error(`First-screen budget exceeded on ${path}: ${bytes} bytes > ${limit} bytes.`);
+  const pageLimit = limitFor(path);
+  if (bytes > pageLimit) throw new Error(`First-screen budget exceeded on ${path}: ${bytes} bytes > ${pageLimit} bytes.`);
 }
 async function measure(browser: Browser, url: string, images: string) {
   const context = await browser.newContext({ viewport: { width: 360, height: 800 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true });

@@ -5,38 +5,52 @@ import Base from '../layouts/Base.astro';
 import AdStack from '../components/AdStack.astro';
 import PosterCard from '../components/PosterCard.astro';
 import { env } from 'cloudflare:workers';
-import { sampleMode, homeTitles, titleUrl, genreTileColor } from '../lib/catalogue';
+import { sampleMode, homeTitles, titleUrl } from '../lib/catalogue';
 import { mediaUrl } from '../lib/media';
+import { rating, runtimeLabel } from '../lib/format';
 import { itemListSchema, siteOrigin } from '../lib/seo';
 let sample = false, failed = false;
 let sections: HomeSection[] = [];
-let catalogue: Awaited<ReturnType<typeof homeTitles>> = { trending: [], top10: [], toprated: [], movies: [], series: [], upcoming: [], genres: [], hero: null as never, trendingMovies: [], trendingSeries: [], netflixNew: [], netflixTrend: [], primeNew: [], appleNew: [] };
+let catalogue: Awaited<ReturnType<typeof homeTitles>> = { trending: [], top10: [], toprated: [], movies: [], series: [], upcoming: [], genres: [], hero: null as never, trendingMovies: [], trendingSeries: [], gems: [], netflix: [], prime: [], apple: [], recent: [] };
 try { sample = await sampleMode(env.DB); catalogue = await homeTitles(env.DB, sample); sections = await homeSections(env.DB); for (const section of sections) if (section.source === 'manual' && ['trending', 'top10', 'movies', 'series', 'upcoming'].includes(section.key)) catalogue[section.key as 'trending'] = await manualTitles(env.DB, section, sample); } catch { failed = true; Astro.response.status = 503; }
 Astro.response.headers.set('Cache-Control', sample || failed ? 'no-store' : 'public, s-maxage=3600, stale-while-revalidate=604800');
 const hero = catalogue.hero;
 const heroPoster = hero ? mediaUrl(hero.poster_r2, env.R2_PUBLIC_BASE, 500) : null;
 const heroBackdrop = hero ? mediaUrl(hero.backdrop_r2, env.R2_PUBLIC_BASE) : null;
+const heroRated = hero !== null && hero.vote_average !== null && hero.vote_average > 0;
 const heroVotes = hero?.vote_count ? new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(hero.vote_count) : null;
+const heroRuntime = hero ? runtimeLabel(hero.runtime_min) : null;
+const heroGenres = hero ? (() => { try { const slugs = JSON.parse(hero.genres) as string[]; return slugs.slice(0, 3).map(slug => slug === 'tv-movie' ? 'TV Movie' : slug.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')).join(' · '); } catch { return ''; } })() : '';
 const trendingSection = sections.find(section => section.key === 'trending');
 const splitMovies = trendingSection?.source === 'manual' ? catalogue.trending.filter(title => title.type === 'movie') : catalogue.trendingMovies;
 const splitSeries = trendingSection?.source === 'manual' ? catalogue.trending.filter(title => title.type === 'tv') : catalogue.trendingSeries;
-const soonTag = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }).toUpperCase();
+const dayMs = 86_400_000;
+const soonDay = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', timeZone: 'UTC' });
+const soonMon = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-GB', { month: 'short', timeZone: 'UTC' });
 const soonFull = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+const inDays = (d: string) => { const n = Math.round((Date.parse(`${d}T00:00:00Z`) - Date.parse(new Date().toISOString().slice(0, 10))) / dayMs); return n <= 0 ? 'Out now' : n === 1 ? 'Tomorrow' : `In ${n} days`; };
 ---
 <Base title="Discover movies & TV" sample={sample} noindex={sample || failed} pageType={failed ? 'utility' : 'home'} schemas={failed ? [] : [itemListSchema(catalogue.trending, siteOrigin(env.SITE_URL))]}>
   {failed ? <section class="empty-state"><h2>The catalogue is temporarily unavailable.</h2><p>Please try again shortly.</p></section> : <>
 {sections.map(section => <>
 {section.key === 'trending' && <>
     {hero && <section class="hero">
-      {heroBackdrop && <div class="hero-media"><img src={heroBackdrop} alt="" fetchpriority="high" decoding="async" /></div>}
-      <div class="hero-shade"></div>
-      <div class="hero-grid">
-        {heroPoster && <div class="hero-art"><picture><source media="(max-width:1100px)" srcset={mediaUrl(hero.poster_r2, env.R2_PUBLIC_BASE, 185)} /><img src={heroPoster} alt={`${hero.title} poster`} fetchpriority="high" decoding="async" /></picture></div>}
+      {heroBackdrop && <div class="hero-tint"><img src={heroBackdrop} alt="" fetchpriority="high" decoding="async" /></div>}
+      <div class="hero-panel">
         <h1>{hero.title}</h1>
-        <p class="hero-meta"><span class="rating"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 17.2 5.9 20.6l1.4-6.8L2.2 9.1l6.9-.8z" /></svg>{hero.vote_average !== null ? hero.vote_average.toFixed(1) : 'Unrated'}</span>{heroVotes && <span class="votes">{heroVotes} votes</span>}<span class="dim">{hero.year ?? 'Year TBA'}</span><span class="dim">{hero.type === 'movie' ? 'Movie' : 'TV series'}</span></p>
+        <p class="hero-facts">
+          <span>{hero.year ?? 'Year TBA'}</span><span aria-hidden="true">·</span><span>{hero.type === 'movie' ? 'Movie' : 'TV series'}</span>
+          {heroRuntime && <><span aria-hidden="true">·</span><span>{heroRuntime}</span></>}
+          {heroGenres && <><span aria-hidden="true">·</span><span>{heroGenres}</span></>}
+          {heroRated && <><span aria-hidden="true">·</span><span class="hero-score">{rating(hero.vote_average)}{heroVotes && <span class="hero-votes"> ({heroVotes} votes)</span>}</span></>}
+        </p>
         {hero.overview && <p class="hero-over">{hero.overview}</p>}
-        <div class="hero-cta"><a class="button primary" href={titleUrl(hero)}>View details</a><a class="button btn-glass" href={`/watch/${hero.slug}/`}>Where to Watch</a></div>
+        <div class="hero-cta"><a class="button primary" href={titleUrl(hero)}>View details</a><a class="button" href={`/watch/${hero.slug}/`}>Where to watch</a></div>
       </div>
+      {heroPoster && <div class="hero-poster"><picture><source media="(max-width:1100px)" srcset={mediaUrl(hero.poster_r2, env.R2_PUBLIC_BASE, 185)} /><img src={heroPoster} alt={`${hero.title} poster`} fetchpriority="high" decoding="async" /></picture></div>}
+    </section>}
+    {catalogue.top10.length > 0 && <section class="shelf" aria-labelledby="top10-title"><div class="shelf-head"><h2 id="top10-title">Top 10 this week</h2><a class="seeall" href="/top10/">Full chart</a></div>
+      <ol class="top10">{catalogue.top10.map((title, i) => { const img = mediaUrl(title.poster_r2, env.R2_PUBLIC_BASE, 185); const rt = runtimeLabel(title.runtime_min); return <li><a href={titleUrl(title)}><span class="t10-rank" aria-hidden="true">{i + 1}</span>{img ? <img data-lazy-src={img} width="185" height="278" alt="" loading="lazy" decoding="async" /> : <span class="t10-noposter" aria-hidden="true"></span>}<span class="t10-main"><b>{title.title}</b><small>{title.year ?? 'Year TBA'} · {title.type === 'movie' ? 'Movie' : 'TV series'}{rt && <> · {rt}</>}</small></span>{title.vote_average !== null && title.vote_average > 0 && <span class="t10-score">{rating(title.vote_average)}</span>}</a></li>; })}</ol>
     </section>}
     {splitMovies.length > 0 && <section class="shelf" aria-labelledby="tm-title"><div class="shelf-head"><h2 id="tm-title">Trending Movies</h2><a class="seeall" href="/movies/">See all</a></div>
       <div class="poster-row">{splitMovies.map(title => <PosterCard title={title} mediaBase={env.R2_PUBLIC_BASE} />)}</div>
@@ -46,27 +60,31 @@ const soonFull = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString('e
       <div class="poster-row">{splitSeries.map(title => <PosterCard title={title} mediaBase={env.R2_PUBLIC_BASE} />)}</div>
     </section>}
     <AdStack pageType="home" placement="native" />
-    {catalogue.netflixNew.length > 0 && <section class="shelf" id="netflix" aria-labelledby="nf-new-title"><div class="shelf-head"><h2 id="nf-new-title">New on <span class="plogo nf">NETFLIX</span></h2></div>
-      <div class="poster-row">{catalogue.netflixNew.map(title => <PosterCard title={title} mediaBase={env.R2_PUBLIC_BASE} />)}</div>
+    {catalogue.gems.length > 0 && <section class="shelf" aria-labelledby="gems-title"><div class="shelf-head"><h2 id="gems-title">Hidden Gems</h2></div>
+      <p class="shelf-note">Rated 7.5 or higher, with fewer than 2,000 votes. Loved, but easy to miss.</p>
+      <div class="poster-row">{catalogue.gems.map(title => <PosterCard title={title} mediaBase={env.R2_PUBLIC_BASE} />)}</div>
     </section>}
-    {catalogue.netflixTrend.length > 0 && <section class="shelf" aria-labelledby="nf-trend-title"><div class="shelf-head"><h2 id="nf-trend-title">Trending on <span class="plogo nf">NETFLIX</span></h2></div>
-      <div class="poster-row">{catalogue.netflixTrend.map(title => <PosterCard title={title} mediaBase={env.R2_PUBLIC_BASE} />)}</div>
+    {catalogue.netflix.length > 0 && <section class="shelf" id="netflix" aria-labelledby="nf-title"><div class="shelf-head"><h2 id="nf-title">Streaming on <span class="plogo nf">NETFLIX</span></h2></div>
+      <div class="poster-row">{catalogue.netflix.map(title => <PosterCard title={title} mediaBase={env.R2_PUBLIC_BASE} />)}</div>
     </section>}
-    {catalogue.primeNew.length > 0 && <section class="shelf" id="prime" aria-labelledby="pv-new-title"><div class="shelf-head"><h2 id="pv-new-title">New on <span class="plogo pv">prime video</span></h2></div>
-      <div class="poster-row">{catalogue.primeNew.map(title => <PosterCard title={title} mediaBase={env.R2_PUBLIC_BASE} />)}</div>
+    {catalogue.prime.length > 0 && <section class="shelf" id="prime" aria-labelledby="pv-title"><div class="shelf-head"><h2 id="pv-title">Streaming on <span class="plogo pv">prime video</span></h2></div>
+      <div class="poster-row">{catalogue.prime.map(title => <PosterCard title={title} mediaBase={env.R2_PUBLIC_BASE} />)}</div>
     </section>}
-    {catalogue.appleNew.length > 0 && <section class="shelf" id="apple" aria-labelledby="ap-new-title"><div class="shelf-head"><h2 id="ap-new-title">New on <span class="plogo ap">Apple TV+</span></h2></div>
-      <div class="poster-row">{catalogue.appleNew.map(title => <PosterCard title={title} mediaBase={env.R2_PUBLIC_BASE} />)}</div>
+    {catalogue.apple.length > 0 && <section class="shelf" id="apple" aria-labelledby="ap-title"><div class="shelf-head"><h2 id="ap-title">Streaming on <span class="plogo ap">Apple TV+</span></h2></div>
+      <div class="poster-row">{catalogue.apple.map(title => <PosterCard title={title} mediaBase={env.R2_PUBLIC_BASE} />)}</div>
     </section>}
     <AdStack pageType="home" placement="infeed" />
 </>}
 {section.key === 'upcoming' && <>{catalogue.upcoming.length > 0 && <section class="shelf" aria-labelledby="soon-title"><div class="shelf-head"><h2 id="soon-title">{section.label}</h2><a class="seeall" href="/upcoming/">See all</a></div>
-      <div class="poster-row">{catalogue.upcoming.map(title => { const img = mediaUrl(title.poster_r2, env.R2_PUBLIC_BASE, 185); return <a class="soon-card" href={titleUrl(title)}><span class="sp">{img && <><img data-lazy-src={img} width="185" height="278" alt={`${title.title} poster`} loading="lazy" decoding="async" /><noscript><img src={img} width="185" height="278" alt={`${title.title} poster`} loading="lazy" decoding="async" /></noscript></>}<span class="fade"></span>{title.release_date && <span class="when">{soonTag(title.release_date)}</span>}<span class="cap"><b>{title.title}</b><span>{title.release_date ? soonFull(title.release_date) : 'Date TBA'}</span></span></span></a>; })}</div>
+      <ol class="soon-list">{catalogue.upcoming.map(title => { const img = mediaUrl(title.poster_r2, env.R2_PUBLIC_BASE, 185); return <li><a href={titleUrl(title)}><span class="soon-date"><b>{title.release_date ? soonDay(title.release_date) : '—'}</b><small>{title.release_date ? soonMon(title.release_date) : 'TBA'}</small></span>{img ? <img data-lazy-src={img} width="185" height="278" alt="" loading="lazy" decoding="async" /> : <span class="t10-noposter" aria-hidden="true"></span>}<span class="t10-main"><b>{title.title}</b><small>{title.type === 'movie' ? 'Movie' : 'TV series'}{title.release_date && <> · {soonFull(title.release_date)}</>}</small></span>{title.release_date && <span class="soon-in">{inDays(title.release_date)}</span>}</a></li>; })}</ol>
     </section>}</>}
 {section.key === 'genres' && <>{catalogue.genres.length > 0 && <section class="shelf" aria-labelledby="genres-title"><div class="shelf-head"><h2 id="genres-title">Browse by Genre</h2><a class="seeall" href="/genres/">All genres</a></div>
-      <div class="genres">{catalogue.genres.slice(0, 12).map((genre, i) => <a class="genre" style={`--g:${genreTileColor(genre.slug, i)}`} href={`/genre/${genre.slug}/`}><b>{genre.name}</b><span>{genre.title_count} titles</span></a>)}</div>
+      <div class="genres">{catalogue.genres.slice(0, 12).map(genre => { const img = mediaUrl(genre.poster_r2, env.R2_PUBLIC_BASE, 185); return <a class="genre-poster" href={`/genre/${genre.slug}/`}>{img && <img data-lazy-src={img} width="185" height="278" alt="" loading="lazy" decoding="async" />}<span class="genre-cap"><b>{genre.name}</b><span>{genre.title_count} titles</span></span></a>; })}</div>
     </section>}<AdStack pageType="home" placement="lower_300x250" /></>}
 </>)}
+{catalogue.recent.length > 0 && <section class="shelf" aria-labelledby="recent-title"><div class="shelf-head"><h2 id="recent-title">Recently added to the catalogue</h2><a class="seeall" href="/new/">See all</a></div>
+  <div class="poster-row">{catalogue.recent.map(title => <PosterCard title={title} mediaBase={env.R2_PUBLIC_BASE} />)}</div>
+</section>}
 {!sections.some(section => section.key === 'trending') && <><AdStack pageType="home" placement="top_300x250" /><AdStack pageType="home" placement="native" /><AdStack pageType="home" placement="lower_300x250" /></>}
   </>}
 </Base>

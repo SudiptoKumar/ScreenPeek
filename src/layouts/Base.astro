@@ -47,7 +47,7 @@ if (pageType !== 'utility' && Astro.url.pathname !== '/' && !structured.some(sch
     <meta name="description" content={summary} />
     {site.google && <meta name="google-site-verification" content={site.google} />}
     {site.bing && <meta name="msvalidate.01" content={site.bing} />}
-    <meta name="theme-color" content="#0D0D0F" />
+    <meta name="theme-color" content="#151515" />
     {indexBlocked && <meta name="robots" content="noindex,follow" />}
     <title>{fullTitle}</title>
     <link rel="canonical" href={canonical} />
@@ -133,7 +133,7 @@ if (pageType !== 'utility' && Astro.url.pathname !== '/' && !structured.some(sch
 
 <noscript><style>img[data-lazy-src]{display:none}</style></noscript>
 <script is:inline>
-{const load=i=>{i.src=i.dataset.lazySrc;delete i.dataset.lazySrc};const images=document.querySelectorAll('img[data-lazy-src]');if('IntersectionObserver'in window){const observer=new IntersectionObserver(entries=>entries.forEach(entry=>{if(entry.isIntersecting){load(entry.target);observer.unobserve(entry.target)}}));images.forEach(image=>observer.observe(image))}else images.forEach(load)}
+{const load=i=>{i.src=i.dataset.lazySrc;delete i.dataset.lazySrc};const images=document.querySelectorAll('img[data-lazy-src]');if('IntersectionObserver'in window){const observer=new IntersectionObserver(entries=>entries.forEach(entry=>{if(entry.isIntersecting){load(entry.target);observer.unobserve(entry.target)}}));const begin=()=>images.forEach(image=>observer.observe(image));if(document.fonts&&document.fonts.ready){Promise.race([document.fonts.ready,new Promise(r=>setTimeout(r,800))]).then(begin)}else begin()}else images.forEach(load)}
 </script>
 
     {['home', 'list', 'detail'].includes(pageType) && <script type="speculationrules" is:inline>{"prefetch":[{"source":"document","where":{"selector_matches":"a[data-poster-card]"},"eagerness":"conservative"}]}</script>}
