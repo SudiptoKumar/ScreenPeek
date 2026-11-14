@@ -97,7 +97,7 @@ export async function homeTitles(db: D1Database, includeUngated = false) {
     query("AND t.type='tv'", 't.popularity DESC', 10),
     query("AND t.vote_average>=7.5 AND t.vote_count>=200 AND t.vote_count<=2000", 't.vote_average DESC,t.vote_count ASC', 10),
     shelf('Netflix', 't.popularity DESC'), shelf('Amazon Prime%', 't.popularity DESC'), shelf('Apple TV%', 't.popularity DESC'),
-    query('', 't.added_at DESC', 10),
+    query('', 't.added_at DESC', 18),
     db.prepare(`SELECT ${fields},t.backdrop_r2,t.overview,t.genres FROM titles t WHERE ${where} ORDER BY ${pinnedFirst},t.id DESC LIMIT 1`).all<HeroTitle>(),
   ]);
   const hero = heroRows.results[0] ?? null;
@@ -108,9 +108,22 @@ export async function homeTitles(db: D1Database, includeUngated = false) {
   const seen = new Set<string>();
   if (hero) seen.add(`${hero.type}:${hero.id}`);
   const take = (list: TitleCard[]) => list.filter(title => { const key = `${title.type}:${title.id}`; if (seen.has(key)) return false; seen.add(key); return true; });
-  const top10D = take(top10), trendingMoviesD = take(trendingMovies), trendingSeriesD = take(trendingSeries),
+  const recentD = take(recent), top10D = take(top10), trendingMoviesD = take(trendingMovies), trendingSeriesD = take(trendingSeries),
     gemsD = take(gems), upcomingD = take(upcoming), netflixD = take(netflix), primeD = take(prime),
-    appleD = take(apple), recentD = take(recent), moviesD = take(movies), seriesD = take(series), topratedD = take(toprated);
+    appleD = take(apple), moviesD = take(movies), seriesD = take(series), topratedD = take(toprated);
+  // New Arrivals cards (owner choice, 2026-11-14): show the title's stored
+  // IMDb score when one exists, the TMDb score otherwise. ratings_ext is
+  // read directly here — the ratings_external flag gates only the detail
+  // page's external-ratings strip, not this owner-requested card label.
+  const imdbByKey = new Map<string, number>();
+  if (recentD.length) {
+    const pairs = recentD.map(() => '(title_id=? AND title_type=?)').join(' OR ');
+    const binds: (string | number)[] = [];
+    for (const title of recentD) binds.push(title.id, title.type);
+    const rows = await db.prepare(`SELECT title_id,title_type,imdb FROM ratings_ext WHERE imdb IS NOT NULL AND (${pairs})`).bind(...binds).all<{ title_id: number; title_type: string; imdb: number }>();
+    for (const row of rows.results) imdbByKey.set(`${row.title_type}:${row.title_id}`, row.imdb);
+  }
+  const arrivals = recentD.map(title => ({ ...title, imdb: imdbByKey.get(`${title.type}:${title.id}`) ?? null }));
   // A representative poster per genre (its most popular title) for poster-led tiles.
   const genres = genresRaw.results.map(row => ({ ...row, poster_r2: null as string | null }));
   if (genres.length) {
@@ -121,7 +134,7 @@ export async function homeTitles(db: D1Database, includeUngated = false) {
     for (const genre of genres) genre.poster_r2 = bySlug.get(genre.slug) ?? null;
   }
   return { trending, top10: top10D, toprated: topratedD, movies: moviesD, series: seriesD, upcoming: upcomingD, genres,
-    hero, trendingMovies: trendingMoviesD, trendingSeries: trendingSeriesD, gems: gemsD, netflix: netflixD, prime: primeD, apple: appleD, recent: recentD };
+    hero, trendingMovies: trendingMoviesD, trendingSeries: trendingSeriesD, gems: gemsD, netflix: netflixD, prime: primeD, apple: appleD, recent: recentD, arrivals };
 }
 
 /** Every genre that has titles, for the /genres/ index page (no cap). */

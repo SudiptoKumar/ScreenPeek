@@ -1,0 +1,33 @@
+---
+import type { TitleCard } from '../lib/catalogue';
+import { titleUrl } from '../lib/catalogue';
+import { mediaUrl } from '../lib/media';
+import { rating } from '../lib/format';
+// New Arrivals carousel card (2026-11-14). Rating rule (owner's choice):
+// the stored IMDb score when the title has one, the TMDb score otherwise;
+// the chip names its source so the two are never confused. A title with
+// neither shows no chip at all (the site's Unrated rule).
+interface Props { title: TitleCard & { imdb: number | null }; mediaBase?: string; eager?: boolean; duplicate?: boolean; }
+const { title, mediaBase, eager = false, duplicate = false } = Astro.props;
+const image = mediaUrl(title.poster_r2, mediaBase, 185);
+const color = /^#[a-f\d]{6}$/i.test(title.poster_color || '') ? title.poster_color! : '#20202B';
+const imdb = title.imdb !== null && title.imdb > 0 ? title.imdb : null;
+const tmdb = title.vote_average !== null && title.vote_average > 0 ? title.vote_average : null;
+const scoreLabel = imdb !== null ? `IMDb rating ${imdb.toFixed(1)} out of 10` : tmdb !== null ? `TMDb rating ${tmdb.toFixed(1)} out of 10` : 'Unrated';
+---
+<a class="arrival-card" href={titleUrl(title)} aria-hidden={duplicate || undefined} tabindex={duplicate ? -1 : undefined}>
+  <span class="poster-frame arrival-frame" style={`--poster-color:${color}`}>
+    {image ? <img src={eager ? image : undefined} data-lazy-src={eager ? undefined : image} width="185" height="278" alt={duplicate ? '' : `${title.title} poster`}
+      loading={eager ? 'eager' : 'lazy'} decoding="async" /> :
+      <span class="poster-placeholder" role="img" aria-label={`${title.title} poster unavailable`}>
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 3v18M17 3v18M3 8h4m-4 8h4M17 8h4m-4 8h4"/></svg>
+        <span class="placeholder-title">{title.title}</span><span class="placeholder-label">Poster unavailable</span>
+      </span>}
+    {!eager && image && !duplicate && <noscript><img src={image} width="185" height="278" alt={`${title.title} poster`} loading="lazy" decoding="async" /></noscript>}
+    {imdb !== null ? <span class="poster-score arrival-score" aria-label={scoreLabel} title={scoreLabel}>IMDb {imdb.toFixed(1)}</span>
+      : tmdb !== null && <span class="poster-score arrival-score" aria-label={scoreLabel} title={scoreLabel}>{rating(tmdb)}</span>}
+    <span class="poster-type">{title.type === 'movie' ? 'MOVIE' : 'TV'}</span>
+  </span>
+  <span class="arrival-name">{title.title}</span>
+  <span class="arrival-meta">{title.year ?? 'Year TBA'} · {title.type === 'movie' ? 'Movie' : 'TV series'}</span>
+</a>

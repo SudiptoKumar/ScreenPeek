@@ -4,23 +4,17 @@ import type { HomeSection } from '../lib/home-config';
 import Base from '../layouts/Base.astro';
 import AdStack from '../components/AdStack.astro';
 import PosterCard from '../components/PosterCard.astro';
+import ArrivalCard from '../components/ArrivalCard.astro';
 import { env } from 'cloudflare:workers';
 import { sampleMode, homeTitles, titleUrl } from '../lib/catalogue';
 import { mediaUrl } from '../lib/media';
-import { rating, runtimeLabel } from '../lib/format';
+
 import { itemListSchema, siteOrigin } from '../lib/seo';
 let sample = false, failed = false;
 let sections: HomeSection[] = [];
-let catalogue: Awaited<ReturnType<typeof homeTitles>> = { trending: [], top10: [], toprated: [], movies: [], series: [], upcoming: [], genres: [], hero: null as never, trendingMovies: [], trendingSeries: [], gems: [], netflix: [], prime: [], apple: [], recent: [] };
+let catalogue: Awaited<ReturnType<typeof homeTitles>> = { trending: [], top10: [], toprated: [], movies: [], series: [], upcoming: [], genres: [], hero: null as never, trendingMovies: [], trendingSeries: [], gems: [], netflix: [], prime: [], apple: [], recent: [], arrivals: [] };
 try { sample = await sampleMode(env.DB); catalogue = await homeTitles(env.DB, sample); sections = await homeSections(env.DB); for (const section of sections) if (section.source === 'manual' && ['trending', 'top10', 'movies', 'series', 'upcoming'].includes(section.key)) catalogue[section.key as 'trending'] = await manualTitles(env.DB, section, sample); } catch { failed = true; Astro.response.status = 503; }
 Astro.response.headers.set('Cache-Control', sample || failed ? 'no-store' : 'public, s-maxage=3600, stale-while-revalidate=604800');
-const hero = catalogue.hero;
-const heroPoster = hero ? mediaUrl(hero.poster_r2, env.R2_PUBLIC_BASE, 500) : null;
-const heroBackdrop = hero ? mediaUrl(hero.backdrop_r2, env.R2_PUBLIC_BASE) : null;
-const heroRated = hero !== null && hero.vote_average !== null && hero.vote_average > 0;
-const heroVotes = hero?.vote_count ? new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(hero.vote_count) : null;
-const heroRuntime = hero ? runtimeLabel(hero.runtime_min) : null;
-const heroGenres = hero ? (() => { try { const slugs = JSON.parse(hero.genres) as string[]; return slugs.slice(0, 3).map(slug => slug === 'tv-movie' ? 'TV Movie' : slug.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')).join(' · '); } catch { return ''; } })() : '';
 const trendingSection = sections.find(section => section.key === 'trending');
 const splitMovies = trendingSection?.source === 'manual' ? catalogue.trending.filter(title => title.type === 'movie') : catalogue.trendingMovies;
 const splitSeries = trendingSection?.source === 'manual' ? catalogue.trending.filter(title => title.type === 'tv') : catalogue.trendingSeries;
@@ -34,23 +28,75 @@ const inDays = (d: string) => { const n = Math.round((Date.parse(`${d}T00:00:00Z
   {failed ? <section class="empty-state"><h2>The catalogue is temporarily unavailable.</h2><p>Please try again shortly.</p></section> : <>
 {sections.map(section => <>
 {section.key === 'trending' && <>
-    {hero && <section class="hero">
-      {heroBackdrop && <div class="hero-tint"><img src={heroBackdrop} alt="" fetchpriority="high" decoding="async" /></div>}
-      <div class="hero-panel">
-        <h1>{hero.title}</h1>
-        <p class="hero-facts">
-          <span>{hero.year ?? 'Year TBA'}</span><span aria-hidden="true">·</span><span>{hero.type === 'movie' ? 'Movie' : 'TV series'}</span>
-          {heroRuntime && <><span aria-hidden="true">·</span><span>{heroRuntime}</span></>}
-          {heroGenres && <><span aria-hidden="true">·</span><span>{heroGenres}</span></>}
-          {heroRated && <><span aria-hidden="true">·</span><span class="hero-score">{rating(hero.vote_average)}{heroVotes && <span class="hero-votes"> ({heroVotes} votes)</span>}</span></>}
-        </p>
-        {hero.overview && <p class="hero-over">{hero.overview}</p>}
-        <div class="hero-cta"><a class="button primary" href={titleUrl(hero)}>View details</a><a class="button" href={`/watch/${hero.slug}/`}>Where to watch</a></div>
+    {catalogue.arrivals.length > 0 && <section class="arrivals" aria-labelledby="arrivals-title">
+      <div class="shelf-head"><h1 id="arrivals-title">New Arrivals</h1>
+        <div class="arrivals-nav">
+          <button type="button" class="arrivals-btn" data-arrivals-prev aria-label="Scroll new arrivals back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+          <button type="button" class="arrivals-btn" data-arrivals-next aria-label="Scroll new arrivals forward"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+        </div>
       </div>
-      {heroPoster && <div class="hero-poster"><picture><source media="(max-width:1100px)" srcset={mediaUrl(hero.poster_r2, env.R2_PUBLIC_BASE, 185)} /><img src={heroPoster} alt={`${hero.title} poster`} fetchpriority="high" decoding="async" /></picture></div>}
+      <div class="arrivals-viewport" data-arrivals>
+        <div class="arrivals-track">
+          {catalogue.arrivals.map((title, i) => <ArrivalCard title={title} mediaBase={env.R2_PUBLIC_BASE} eager={i < 2} />)}
+          {catalogue.arrivals.map(title => <ArrivalCard title={title} mediaBase={env.R2_PUBLIC_BASE} duplicate />)}
+        </div>
+      </div>
+      <script>
+        // New Arrivals auto-scroll: the track holds the list twice; the
+        // view scrolls slowly and wraps by exactly one set width, so the
+        // loop is seamless. Hover, touch, wheel and the arrow buttons all
+        // pause it; it resumes a few seconds after the last interaction.
+        // Reduced-motion visitors get a plain manual scroller.
+        const viewport = document.querySelector<HTMLElement>('[data-arrivals]');
+        if (viewport) {
+          const track = viewport.firstElementChild as HTMLElement;
+          const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+          let setWidth = 0;
+          const measure = (): void => {
+            const cards = track.children;
+            if (cards.length > 1) setWidth = (cards[cards.length / 2] as HTMLElement).offsetLeft - (cards[0] as HTMLElement).offsetLeft;
+          };
+          measure();
+          window.addEventListener('resize', measure);
+          let held = false;
+          let resumeAt = 0;
+          let last = performance.now();
+          // Fractional position accumulator: some browsers snap
+          // scrollLeft to whole pixels, which would corrupt a
+          // read-modify-write loop (0.5px/frame snapping up to a full
+          // pixel every frame, doubling the speed). The accumulator
+          // keeps the true pace everywhere.
+          let pos = viewport.scrollLeft;
+          const SPEED = 32;
+          const tick = (now: number): void => {
+            const dt = Math.min(100, now - last);
+            last = now;
+            if (!reduce && !held && now >= resumeAt && setWidth > 0 && !document.hidden) {
+              pos += (SPEED * dt) / 1000;
+              if (pos >= setWidth) pos -= setWidth;
+              viewport.scrollLeft = pos;
+            }
+            requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
+          viewport.addEventListener('pointerenter', () => { held = true; });
+          viewport.addEventListener('pointerleave', () => { held = false; });
+          const hold = (): void => { resumeAt = performance.now() + 3000; };
+          viewport.addEventListener('pointerdown', () => { hold(); pos = viewport.scrollLeft; });
+          viewport.addEventListener('wheel', hold, { passive: true });
+          viewport.addEventListener('scroll', () => {
+            if (setWidth <= 0) return;
+            if (Math.abs(viewport.scrollLeft - pos) > 2) pos = viewport.scrollLeft;
+            if (pos >= setWidth) { pos -= setWidth; viewport.scrollLeft = pos; }
+          }, { passive: true });
+          const step = (dir: number): void => { hold(); viewport.scrollBy({ left: dir * viewport.clientWidth * 0.8, behavior: 'smooth' }); };
+          document.querySelector('[data-arrivals-prev]')?.addEventListener('click', () => step(-1));
+          document.querySelector('[data-arrivals-next]')?.addEventListener('click', () => step(1));
+        }
+      </script>
     </section>}
     {catalogue.top10.length > 0 && <section class="shelf" aria-labelledby="top10-title"><div class="shelf-head"><h2 id="top10-title">Top 10 this week</h2><a class="seeall" href="/top10/">Full chart</a></div>
-      <ol class="top10">{catalogue.top10.map((title, i) => { const img = mediaUrl(title.poster_r2, env.R2_PUBLIC_BASE, 185); const rt = runtimeLabel(title.runtime_min); return <li><a href={titleUrl(title)}><span class="t10-rank" aria-hidden="true">{i + 1}</span>{img ? <img data-lazy-src={img} width="185" height="278" alt="" loading="lazy" decoding="async" /> : <span class="t10-noposter" aria-hidden="true"></span>}<span class="t10-main"><b>{title.title}</b><small>{title.year ?? 'Year TBA'} · {title.type === 'movie' ? 'Movie' : 'TV series'}{rt && <> · {rt}</>}</small></span>{title.vote_average !== null && title.vote_average > 0 && <span class="t10-score">{rating(title.vote_average)}</span>}</a></li>; })}</ol>
+      <div class="top10-row">{catalogue.top10.map((title, i) => <div class="top10-item"><span class="top10-num" aria-hidden="true">{i + 1}</span><span class="sr-only">Number {i + 1}: </span><PosterCard title={title} mediaBase={env.R2_PUBLIC_BASE} /></div>)}</div>
     </section>}
     {splitMovies.length > 0 && <section class="shelf" aria-labelledby="tm-title"><div class="shelf-head"><h2 id="tm-title">Trending Movies</h2><a class="seeall" href="/movies/">See all</a></div>
       <div class="poster-row">{splitMovies.map(title => <PosterCard title={title} mediaBase={env.R2_PUBLIC_BASE} />)}</div>
@@ -82,9 +128,6 @@ const inDays = (d: string) => { const n = Math.round((Date.parse(`${d}T00:00:00Z
       <div class="genres">{catalogue.genres.slice(0, 12).map(genre => { const img = mediaUrl(genre.poster_r2, env.R2_PUBLIC_BASE, 185); return <a class="genre-poster" href={`/genre/${genre.slug}/`}>{img && <img data-lazy-src={img} width="185" height="278" alt="" loading="lazy" decoding="async" />}<span class="genre-cap"><b>{genre.name}</b><span>{genre.title_count} titles</span></span></a>; })}</div>
     </section>}<AdStack pageType="home" placement="lower_300x250" /></>}
 </>)}
-{catalogue.recent.length > 0 && <section class="shelf" aria-labelledby="recent-title"><div class="shelf-head"><h2 id="recent-title">Recently added to the catalogue</h2><a class="seeall" href="/new/">See all</a></div>
-  <div class="poster-row">{catalogue.recent.map(title => <PosterCard title={title} mediaBase={env.R2_PUBLIC_BASE} />)}</div>
-</section>}
 {!sections.some(section => section.key === 'trending') && <><AdStack pageType="home" placement="top_300x250" /><AdStack pageType="home" placement="native" /><AdStack pageType="home" placement="lower_300x250" /></>}
   </>}
 </Base>

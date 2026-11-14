@@ -261,3 +261,32 @@ body:not(.admin-shell) h1,.shelf-head h2{font-family:'Fraunces',Georgia,'Times N
    header (brand + nav + search + menu) is wider than the viewport; tighten
    the search field and gaps in that band only. */
 @media(min-width:1001px) and (max-width:1150px){.site-header{gap:10px}.site-header input{width:150px}.desktop-nav{gap:9px}}
+
+/* New Arrivals carousel + Netflix-style Top 10 (owner redesign,
+   2026-11-14). The arrivals viewport is the only thing on the page that
+   scrolls sideways; the page itself never overflows horizontally. */
+.arrivals{margin:2px 0 6px}
+.shelf-head h1{font-size:clamp(18px,1.6vw,22px);font-weight:700;letter-spacing:-.015em;margin:0;display:inline-flex;align-items:center;gap:10px}
+.arrivals-nav{margin-left:auto;display:flex;gap:8px}
+.arrivals-btn{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:50%;background:var(--panel);border:1px solid var(--line);color:var(--text);cursor:pointer;padding:0}
+.arrivals-btn:hover{border-color:var(--accent);color:var(--accent)}
+.arrivals-viewport{overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.arrivals-viewport::-webkit-scrollbar{display:none}
+.arrivals-track{display:flex;gap:12px;width:max-content;padding:2px 2px 10px}
+.arrival-card{width:126px;flex:none;color:var(--text)}
+.arrival-card:hover{text-decoration:none}
+.arrival-frame{display:block;transition:border-color .25s ease}
+.arrival-card:hover .arrival-frame{border-color:var(--accent)}
+.arrival-frame img{transition:transform .35s ease}
+.arrival-card:hover .arrival-frame img{transform:scale(1.05)}
+.arrival-name{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;font-weight:600;font-size:13.5px;line-height:1.35;margin-top:8px}
+.arrival-meta{display:block;color:var(--muted);font-size:12px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.arrival-score{font-size:9.5px}
+@media(min-width:640px){.arrival-card{width:148px}}
+@media(min-width:1100px){.arrival-card{width:166px}}
+.top10-row{display:flex;gap:4px;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x proximity;padding:8px 0 10px;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+.top10-item{position:relative;flex:none;padding-left:52px;scroll-snap-align:start}
+.top10-num{position:absolute;left:0;bottom:79px;z-index:0;font-family:'Archivo',system-ui,sans-serif;font-weight:900;font-size:124px;line-height:.76;letter-spacing:-.04em;color:#22222a;-webkit-text-stroke:2px #4a4a55;transform:scaleX(.84);transform-origin:left bottom;user-select:none;pointer-events:none}
+.top10-item .poster-item{width:112px;position:relative;z-index:1}
+@media(min-width:640px){.top10-item{padding-left:64px}.top10-num{font-size:158px;bottom:83px}.top10-item .poster-item{width:136px}}
+@media(min-width:1100px){.top10-item{padding-left:76px}.top10-num{font-size:188px}.top10-item .poster-item{width:156px}}
