@@ -248,7 +248,13 @@ export async function runSync(options: {
       const titleStart = performance.now();
       console.info(`Sync timing: starting ${candidate.type}:${candidate.id} people=${data.people.length} seasons=${data.seasons.length} at ${Math.round(titleStart - start)}ms.`);
       try {
-        for (const person of data.people) { if (overTime()) throw new Error('Sync deadline reached'); await syncPerson(person); }
+        // People are fetched in parallel (owner's 400/day pace,
+        // 2026-11-14): one-by-one, a new title's cast cost ~25s of
+        // sequential detail + photo fetches and the run's clock — not
+        // the write budget — became the ceiling (41 added using only
+        // 9.5k of 95k rows). syncPerson registers each person before
+        // its first await, so parallel calls never double-fetch.
+        await Promise.all(data.people.map(async person => { if (overTime()) throw new Error('Sync deadline reached'); await syncPerson(person); }));
         data.credits = data.credits.filter(credit => !blocked.has(`person:${credit.person_id}`) && !people.get(credit.person_id)?.deleted_at);
         const locks = parseArray(previous?.locked_fields || '[]');
         if(locks.length)console.info(`Kept manual edit fields for ${candidate.type}:${candidate.id}: ${locks.filter(field=>typeof field==='string'&&/^[a-z_]{1,40}$/.test(field)).join(', ')}`);
@@ -297,13 +303,25 @@ export async function runSync(options: {
             // API rate limit is per request, and a long-running show
             // otherwise burns hundreds of calls on a single title.
             const statements: SqlStatement[] = [];
+            // Still images are fetched in parallel for the same reason
+            // as people above: one-by-one they made series the slowest
+            // titles in the run. The statement build below stays
+            // sequential and reads the results from this map.
+            const stills = new Map<number, { keys: Record<string, string>; warning: string | null }>();
+            await Promise.all((details.episodes || []).map(async episode => {
+              if (!Number.isSafeInteger(episode.episode_number) || episode.episode_number < 1) return;
+              const priorEpisode = existingEpisodes.get(episode.episode_number);
+              if (priorEpisode?.still_r2) { stills.set(episode.episode_number, { keys: { '185': priorEpisode.still_r2 as string }, warning: null }); return; }
+              const still = await processImage(client, images, { kind: 'still', id: candidate.id, mediaType: 'tv', path: episode.still_path });
+              if (still.warning) warn(still.warning);
+              stills.set(episode.episode_number, still);
+            }));
             for (const episode of details.episodes || []) {
               if (overTime()) throw new Error('Sync deadline reached');
               if (!Number.isSafeInteger(episode.episode_number) || episode.episode_number < 1) continue;
               const priorEpisode = existingEpisodes.get(episode.episode_number);
               if (priorEpisode && priorEpisode.still_r2 && priorEpisode.name === (episode.name || '') && (priorEpisode.air_date || null) === (episode.air_date || null)) continue;
-              const still = priorEpisode?.still_r2 ? { keys: { '185': priorEpisode.still_r2 as string }, warning: null } : await processImage(client, images, { kind: 'still', id: candidate.id, mediaType: 'tv', path: episode.still_path });
-              if (still.warning) warn(still.warning);
+              const still = stills.get(episode.episode_number) ?? { keys: {} as Record<string, string>, warning: null };
               statements.push({ sql: `INSERT INTO episodes(title_id,season_number,episode_number,name,overview,air_date,still_r2)
                 SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM titles WHERE id=? AND type='tv' AND deleted=0 AND deleted_at IS NULL)
                 ON CONFLICT(title_id,season_number,episode_number) DO UPDATE SET name=excluded.name,overview=excluded.overview,air_date=excluded.air_date,still_r2=excluded.still_r2`,
