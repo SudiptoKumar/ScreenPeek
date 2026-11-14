@@ -257,3 +257,7 @@ body:not(.admin-shell) h1,.shelf-head h2{font-family:'Fraunces',Georgia,'Times N
 .detail-hero .hero-media img{filter:none;opacity:.14}
 .detail-hero .hero-shade{display:none}
 .catalogue-section h2,.side-block h2,.watch-summary h2{font-family:'Fraunces',Georgia,'Times New Roman',serif;font-weight:600}
+/* Header fit (mandate responsive pass): between 1001-1150px the desktop
+   header (brand + nav + search + menu) is wider than the viewport; tighten
+   the search field and gaps in that band only. */
+@media(min-width:1001px) and (max-width:1150px){.site-header{gap:10px}.site-header input{width:150px}.desktop-nav{gap:9px}}
