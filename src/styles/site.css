@@ -251,3 +251,9 @@ body:not(.admin-shell) h1,.shelf-head h2{font-family:'Fraunces',Georgia,'Times N
 .genre-cap{position:absolute;left:0;right:0;bottom:0;padding:24px 10px 8px;background:linear-gradient(transparent,rgba(12,10,8,.88));display:flex;flex-direction:column;gap:1px}
 .genre-cap b{font-size:13px;color:#fff}
 .genre-cap span{font-size:11px;color:#d8d2c4}
+/* Detail addendum (Cinematic Editorial): the backdrop becomes a quiet tint
+   (no blur, no gradient shade); section headings take the display serif. */
+.detail-hero{background:var(--panel)}
+.detail-hero .hero-media img{filter:none;opacity:.14}
+.detail-hero .hero-shade{display:none}
+.catalogue-section h2,.side-block h2,.watch-summary h2{font-family:'Fraunces',Georgia,'Times New Roman',serif;font-weight:600}

@@ -126,7 +126,15 @@ export async function homeTitles(db: D1Database, includeUngated = false) {
 
 /** Every genre that has titles, for the /genres/ index page (no cap). */
 export async function allGenres(db: D1Database) {
-  return (await db.prepare(`SELECT g.slug,COALESCE(NULLIF(o.display_name,''),g.name) name,g.title_count FROM genres g LEFT JOIN taxonomy_overrides o ON o.kind='genre' AND o.slug=g.slug AND o.deleted_at IS NULL WHERE g.title_count>0 AND COALESCE(o.hidden,0)=0 ORDER BY g.title_count DESC,name`).all<{ slug: string; name: string; title_count: number }>()).results;
+  const rows = (await db.prepare(`SELECT g.slug,COALESCE(NULLIF(o.display_name,''),g.name) name,g.title_count FROM genres g LEFT JOIN taxonomy_overrides o ON o.kind='genre' AND o.slug=g.slug AND o.deleted_at IS NULL WHERE g.title_count>0 AND COALESCE(o.hidden,0)=0 ORDER BY g.title_count DESC,name`).all<{ slug: string; name: string; title_count: number }>()).results;
+  const genres = rows.map(row => ({ ...row, poster_r2: null as string | null }));
+  if (genres.length) {
+    const marks = genres.map(() => '?').join(',');
+    const posters = await db.prepare(`SELECT genre_slug,poster_r2 FROM (SELECT tg.genre_slug,t.poster_r2,ROW_NUMBER() OVER (PARTITION BY tg.genre_slug ORDER BY t.popularity DESC) rn FROM title_genres tg JOIN titles t ON t.id=tg.title_id AND t.type=tg.title_type WHERE tg.genre_slug IN (${marks}) AND t.poster_r2 IS NOT NULL AND t.hidden=0 AND t.deleted=0 AND t.deleted_at IS NULL) WHERE rn=1`).bind(...genres.map(genre => genre.slug)).all<{ genre_slug: string; poster_r2: string }>();
+    const bySlug = new Map(posters.results.map(row => [row.genre_slug, row.poster_r2]));
+    for (const genre of genres) genre.poster_r2 = bySlug.get(genre.slug) ?? null;
+  }
+  return genres;
 }
 
 /** The /top-rated/ page: best audience scores first, movies then series. */

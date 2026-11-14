@@ -2,7 +2,7 @@
 import type { TitlePageData } from '../lib/detail';
 interface Props { score: number | null; count: number | null; external?: TitlePageData['external']; }
 const { score, count, external = null } = Astro.props;
-const tmdb = score === null || !Number.isFinite(score) ? 'Unrated' : `${score.toFixed(1)}/10`;
+const tmdb = score === null || !Number.isFinite(score) || score <= 0 || count === 0 ? 'Unrated' : `${score.toFixed(1)}/10`;
 ---
 <section class="ratings-strip" aria-label="Ratings" data-detail-section="ratings">
   <div class="rating-source"><span>TMDb</span><strong>{tmdb}</strong><small>{count === null ? 'Vote count unavailable' : `${count.toLocaleString('en')} votes`}</small></div>

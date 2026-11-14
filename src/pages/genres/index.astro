@@ -2,7 +2,8 @@
 import Base from '../../layouts/Base.astro';
 import AdStack from '../../components/AdStack.astro';
 import { env } from 'cloudflare:workers';
-import { allGenres, sampleMode, genreTileColor } from '../../lib/catalogue';
+import { allGenres, sampleMode } from '../../lib/catalogue';
+import { mediaUrl } from '../../lib/media';
 let sample = false, failed = false;
 let genres: Awaited<ReturnType<typeof allGenres>> = [];
 try { sample = await sampleMode(env.DB); genres = await allGenres(env.DB); } catch { failed = true; Astro.response.status = 503; }
@@ -14,6 +15,6 @@ const totalTitles = genres.reduce((sum, genre) => sum + genre.title_count, 0);
     <h1>All genres</h1>
     <p>{genres.length} genres · {totalTitles.toLocaleString('en')} titles</p>
   </section>
-  {failed ? <section class="empty-state"><h2>The catalogue is temporarily unavailable.</h2><p>Please try again shortly.</p></section> : genres.length ? <section class="catalogue-section" aria-label="All genres"><div class="genres">{genres.map((genre, index) => <a class="genre" style={`--g:${genreTileColor(genre.slug, index)}`} href={`/genre/${genre.slug}/`}><b>{genre.name}</b><span>{genre.title_count} {genre.title_count === 1 ? 'title' : 'titles'}</span></a>)}</div></section> : <p class="quiet-empty">Genres will appear after the next catalogue update.</p>}
+  {failed ? <section class="empty-state"><h2>The catalogue is temporarily unavailable.</h2><p>Please try again shortly.</p></section> : genres.length ? <section class="catalogue-section" aria-label="All genres"><div class="genres">{genres.map(genre => { const img = mediaUrl(genre.poster_r2, env.R2_PUBLIC_BASE, 185); return <a class="genre-poster" href={`/genre/${genre.slug}/`}>{img && <img data-lazy-src={img} width="185" height="278" alt="" loading="lazy" decoding="async" />}<span class="genre-cap"><b>{genre.name}</b><span>{genre.title_count} {genre.title_count === 1 ? 'title' : 'titles'}</span></span></a>; })}</div></section> : <p class="quiet-empty">Genres will appear after the next catalogue update.</p>}
   {!failed && <AdStack pageType="list" placement="native" />}
 </Base>
