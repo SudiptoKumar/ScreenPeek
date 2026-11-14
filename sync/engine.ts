@@ -75,16 +75,18 @@ export async function runSync(options: {
     const manual = Boolean(options.targets || options.personIds);
     // Daily write governor: D1's free plan allows 100,000 written rows a
     // day (UTC) across the whole system (sync, money checker, panel).
-    // Scheduled runs share a soft ceiling of 85,000, tracked in the
-    // sync_write_day config counter, so running more often can never
-    // starve everything else. Runs with an explicit budget (tests) skip
-    // the cap; every run still records what it wrote.
+    // Scheduled runs share a soft ceiling of 95,000 (owner, 2026-11-14:
+    // use the full budget for catalogue growth; 5,000 rows stay reserved
+    // so visitor tracking, the panel and the money checker can never be
+    // starved by the sync). Tracked in the sync_write_day config counter.
+    // Runs with an explicit budget (tests) skip the cap; every run still
+    // records what it wrote.
     if (options.writeBudget === undefined) {
       try {
         const saved = JSON.parse(config.sync_write_day || '{}') as { day?: string; rows?: number };
         if (saved.day === writeDay && Number.isFinite(saved.rows)) dailyRowsBase = Math.max(0, Math.floor(saved.rows!));
       } catch { /* A corrupt counter must never block the sync. */ }
-      if (!manual) budget = Math.min(budget, Math.max(1_000, 85_000 - dailyRowsBase));
+      if (!manual) budget = Math.min(budget, Math.max(1_000, 95_000 - dailyRowsBase));
     }
     // Owner's catalogue build (2026-11-11): add 500 movies + 100 series a
     // day until the catalogue holds 5,000 complete movies and 2,000
@@ -96,6 +98,11 @@ export async function runSync(options: {
     // "Complete" = the poster is stored (poster_r2 set). Manual targeted
     // imports bypass the caps, like they bypass the popularity gate.
     let perTypeMax: Partial<Record<MediaType, number>> | undefined;
+    // Series persist cap for this run (the config series cap). Selection
+    // prepares up to 4x this many series so the ones dropped by the
+    // 16-episode rule are backfilled from the same run's pool instead of
+    // wasting the slots; the persist loop enforces the cap itself.
+    let seriesPersistCap = Number.POSITIVE_INFINITY;
     if (!manual) {
       const cap = (value: string | undefined, fallback: number) => { const parsed = Number(value); return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : fallback; };
       const completeMovies = [...existing.values()].filter(row => row.type === 'movie' && row.poster_r2).length;
@@ -104,7 +111,8 @@ export async function runSync(options: {
       const seriesGoal = cap(config.sync_series_goal, 2000);
       const movieCap = completeMovies >= movieGoal ? 25 : cap(config.sync_movie_cap, 125);
       const seriesCap = completeSeries >= seriesGoal ? 10 : cap(config.sync_series_cap, 25);
-      perTypeMax = { movie: movieCap, tv: seriesCap };
+      seriesPersistCap = seriesCap;
+      perTypeMax = { movie: movieCap, tv: seriesCap * 4 };
       console.info(`Sync targets: complete movies ${completeMovies}/${movieGoal} (per-run cap ${movieCap}), complete series ${completeSeries}/${seriesGoal} (per-run cap ${seriesCap}).`);
     }
     // A targeted (manual) import must import exactly the requested titles.
@@ -112,6 +120,7 @@ export async function runSync(options: {
     // of queued candidates and they would never reach the selection window.
     // Queue rows themselves stay untouched in the database for cron runs.
     const filtered = filterCandidates(manual ? collected.titles : [...queued, ...collected.titles], { existing, blocklist: blocked, now,
+      freshnessHours: 24 * 7,
       maxTitles: options.maxTitles ?? Math.min(2000, Number(config.sync_max_titles || 2000)), popularityGate: manual ? 0 : threshold, perTypeMax });
     const usedSlugs = new Set([...existing.values()].map(row => row.slug));
     const usedPeopleSlugs = new Set([...people.values()].map(row => row.slug));
@@ -141,7 +150,10 @@ export async function runSync(options: {
             .reduce((max, season) => Math.max(max, season.episode_count || 0), 0);
           if (longestSeason > 16) {
             droppedSeries++;
-            await batch([{ sql: 'DELETE FROM sync_queue WHERE title_id=? AND title_type=?', params: [item.candidate.id, item.candidate.type] }]);
+            await batch([
+              { sql: 'DELETE FROM sync_queue WHERE title_id=? AND title_type=?', params: [item.candidate.id, item.candidate.type] },
+              { sql: 'INSERT OR IGNORE INTO blocklist(tmdb_id,type,reason) VALUES(?,?,?)', params: [item.candidate.id, item.candidate.type, 'season over 16 episodes (owner rule)'] },
+            ]);
             continue;
           }
         }
@@ -222,6 +234,7 @@ export async function runSync(options: {
       try { await syncPerson({ id, name: '' }, false); }
       catch { warn(`Person ${id}: import failed validation.`); }
     }
+    let persistedSeries = 0;
     for (const [index, prepared] of work.prepared.entries()) {
       if (rowsWritten >= budget || performance.now() - start >= duration) {
         deferred.push(...work.prepared.slice(index).map(item => item.candidate));
@@ -229,6 +242,7 @@ export async function runSync(options: {
         break;
       }
       const { candidate, data } = prepared;
+      if (candidate.type === 'tv' && persistedSeries >= seriesPersistCap) { deferred.push(candidate); continue; }
       const previous = existing.get(titleKey(candidate.type, candidate.id));
       const overTime = () => performance.now() - start >= duration;
       const titleStart = performance.now();
@@ -300,6 +314,7 @@ export async function runSync(options: {
         }
         await batch([{ sql: 'DELETE FROM sync_queue WHERE title_id=? AND title_type=?', params: [candidate.id, candidate.type] }]);
         if (previous) summary.updated++; else summary.added++;
+        if (candidate.type === 'tv') persistedSeries++;
       } catch (error) {
         deferred.push(candidate);
         // A deadline stop mid-title is a deferral, not a failure: the

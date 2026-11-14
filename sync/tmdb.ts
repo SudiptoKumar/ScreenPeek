@@ -1,6 +1,6 @@
 /** All source URL knowledge stays here. Import this module from sync/ only. */
 export type MediaType = 'movie' | 'tv';
-export type DiscoveryList = 'trending' | 'now_playing' | 'upcoming' | 'on_the_air' | 'airing_today' | 'top_rated';
+export type DiscoveryList = 'trending' | 'now_playing' | 'upcoming' | 'on_the_air' | 'airing_today' | 'top_rated' | 'discover_movie' | 'discover_tv';
 export interface TmdbPage<T> { page: number; total_pages: number; results: T[]; }
 export interface TmdbSummary {
   id: number; media_type?: MediaType | 'person'; title?: string; name?: string;
@@ -149,9 +149,16 @@ export class TmdbClient {
     const paths: Record<DiscoveryList, string> = {
       trending: 'trending/all/day', now_playing: 'movie/now_playing', upcoming: 'movie/upcoming',
       on_the_air: 'tv/on_the_air', airing_today: 'tv/airing_today', top_rated: 'movie/top_rated',
+      discover_movie: 'discover/movie', discover_tv: 'discover/tv',
     };
     if (!Object.hasOwn(paths, list)) throw new Error('Unknown discovery list');
-    return this.json<TmdbPage<TmdbSummary>>(paths[list], { page: this.page(page) });
+    // The deep catalogue walk: every title on TMDb ordered by popularity,
+    // paged far past the front lists so the catalogue can grow to thousands.
+    const extra: Partial<Record<DiscoveryList, Record<string, string>>> = {
+      discover_movie: { sort_by: 'popularity.desc', include_adult: 'false' },
+      discover_tv: { sort_by: 'popularity.desc', include_adult: 'false' },
+    };
+    return this.json<TmdbPage<TmdbSummary>>(paths[list], { page: this.page(page), ...(extra[list] ?? {}) });
   }
 
   details<T = Record<string, unknown>>(type: MediaType, id: number) {

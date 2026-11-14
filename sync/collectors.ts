@@ -53,7 +53,7 @@ export async function collectCandidates(
   const window = { startDate: new Date(start).toISOString().slice(0, 10), endDate: new Date(now).toISOString().slice(0, 10) };
   const needsReconciliation = lastSuccess !== undefined && now - lastSuccess > 14 * day;
   // Independent feeds run together. The shared client still enforces its five-request cap.
-  const [movies, tv, people, discovery, topRated] = await Promise.all([
+  const [movies, tv, people, discovery, topRated, deepMovies, deepTv] = await Promise.all([
     pages(page => client.changes('movie', window.startDate, window.endDate, page)),
     pages(page => client.changes('tv', window.startDate, window.endDate, page)),
     pages(page => client.changes('person', window.startDate, window.endDate, page)),
@@ -62,6 +62,14 @@ export async function collectCandidates(
     // top-rated list): 13 pages ≈ 260 titles, marked so the selection
     // below always puts them first.
     pages(page => client.discovery('top_rated', page), 13),
+    // The deep walk (owner's growth fix, 2026-11-14): the front lists hold
+    // only a few hundred titles and were fully imported within days, after
+    // which runs had almost no NEW titles to add. Discover-by-popularity
+    // pages 25 deep per type (≈500 titles each) keep fresh candidates
+    // flowing; deferred ones persist in the queue between runs, so the
+    // walk continues where it left off instead of restarting.
+    pages(page => client.discovery('discover_movie', page), 25),
+    pages(page => client.discovery('discover_tv', page), 25),
   ]);
   const titles = new Map<string, Candidate>();
   const adults = new Set<string>();
@@ -79,6 +87,15 @@ export async function collectCandidates(
       if (!validId(summary.id) || summary.media_type === 'person') continue;
       const type = listTypes[list] ?? summary.media_type;
       if (type !== 'movie' && type !== 'tv') continue;
+      if (summary.media_type && summary.media_type !== type) continue;
+      const key = titleKey(type, summary.id);
+      if (summary.adult === true) { adults.add(key); continue; }
+      titles.set(key, merge(titles.get(key), { ...summary, type, changed: false }));
+    }
+  }
+  for (const [type, summaries] of [['movie', deepMovies], ['tv', deepTv]] as const) {
+    for (const summary of summaries) {
+      if (!validId(summary.id) || summary.media_type === 'person') continue;
       if (summary.media_type && summary.media_type !== type) continue;
       const key = titleKey(type, summary.id);
       if (summary.adult === true) { adults.add(key); continue; }
@@ -151,13 +168,17 @@ export function filterCandidates(
     if (reason) skipped.push({ candidate, reason });
     else eligible.push(candidate);
   }
-  // Owner's extraction order (2026-11-11): top-rated movies first, then
-  // all other movies, then series. Inside each tier, NEW titles (not yet
-  // in the catalogue) come before updates of existing ones — the latest
-  // additions always land first; updates use whatever room is left.
-  eligible.sort((a, b) => Number(b.topRated === true) - Number(a.topRated === true)
+  // Owner's extraction order (2026-11-11, corrected 2026-11-14): NEW
+  // titles come before updates GLOBALLY, not just inside a tier. The old
+  // order put the top-rated tier first, and since all ~260 top-rated
+  // movies were already in the catalogue, every run's slots were spent
+  // re-updating them while new titles never reached the selection window
+  // (added stayed 0 for days). Inside the new-first order: top-rated
+  // first, then movies before series, changed before unchanged, then
+  // popularity. Updates take only the room new titles leave.
+  eligible.sort((a, b) => Number(options.existing.has(titleKey(a.type, a.id))) - Number(options.existing.has(titleKey(b.type, b.id)))
+    || Number(b.topRated === true) - Number(a.topRated === true)
     || (a.type === b.type ? 0 : a.type === 'movie' ? -1 : 1)
-    || Number(options.existing.has(titleKey(a.type, a.id))) - Number(options.existing.has(titleKey(b.type, b.id)))
     || Number(b.changed) - Number(a.changed) || popularity(b) - popularity(a) || identityOrder(a, b));
   // Per-type caps pace the catalogue build (owner's 500 movies + 100
   // series per day, shaped per run): once a type hits its cap, its

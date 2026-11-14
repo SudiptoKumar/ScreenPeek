@@ -32,18 +32,20 @@ test('collects every changes page, three pages per discovery list plus the top-r
       if (list === 'upcoming') return page(current === 1 ? [{ id: 6, popularity: 30, poster_path: '/poster.jpg' }] : [{ id: 6, popularity: 60, poster_path: null }], current, 2);
       if (list === 'on_the_air') return page([], current, 0);
       if (list === 'top_rated') return page([{ id: 6, popularity: 30, poster_path: '/poster.jpg' }], current);
+      if (list === 'discover_movie') return page([{ id: 11, popularity: 90, poster_path: '/deep.jpg' }], current);
+      if (list === 'discover_tv') return page([{ id: 12, popularity: 80, poster_path: '/deep-tv.jpg' }], current);
       return page([{ id: 7, popularity: 5 }], current);
     },
   };
   const result = await collectCandidates(client, { now });
-  assert.equal(calls.length, 14);
+  assert.equal(calls.length, 16);
   assert.ok(calls.includes('discovery:top_rated:1'));
   assert.ok(calls.includes('changes:movie:2'));
   assert.ok(calls.includes('changes:person:2'));
   assert.ok(calls.includes('discovery:trending:3'));
   assert.ok(!calls.includes('discovery:trending:4'));
   assert.ok(!calls.includes('discovery:now_playing:2'));
-  assert.deepEqual(result.titles.map(({ type, id }) => `${type}:${id}`), ['movie:1', 'movie:4', 'movie:6', 'tv:1', 'tv:7']);
+  assert.deepEqual(result.titles.map(({ type, id }) => `${type}:${id}`), ['movie:1', 'movie:4', 'movie:6', 'movie:11', 'tv:1', 'tv:7', 'tv:12']);
   assert.equal(result.titles.find(candidate => candidate.id === 4)?.changed, true);
   assert.equal(result.titles.find(candidate => candidate.id === 4)?.title, 'Changed movie');
   assert.equal(result.titles.find(candidate => candidate.id === 6)?.popularity, 60);
@@ -131,4 +133,18 @@ test('default cap is 2000, deduplication and tie order are deterministic, and ze
   assert.throws(() => filterCandidates(candidates, { ...options, maxTitles: -1 }), /Maximum/);
   assert.throws(() => filterCandidates(candidates, { ...options, freshnessHours: NaN }), /Freshness/);
   assert.throws(() => filterCandidates(candidates, { ...options, popularityGate: Infinity }), /Popularity/);
+});
+
+test('new titles outrank top-rated updates globally (owner rule, 2026-11-14)', () => {
+  // Regression pin for the frozen-catalogue bug: an existing top-rated
+  // movie must NOT take a selection slot ahead of a brand-new title.
+  const state = (id: number): ExistingTitleState => ({ id, type: 'movie', slug: `existing-${id}`, updated_at: '2026-10-01T00:00:00Z' });
+  const existing = new Map([['movie:1', state(1)]]);
+  const candidates: Candidate[] = [
+    { id: 1, type: 'movie', changed: true, topRated: true, popularity: 99, poster_path: '/old.jpg' },
+    { id: 2, type: 'movie', changed: false, popularity: 20, poster_path: '/new.jpg' },
+  ];
+  const result = filterCandidates(candidates, { existing, blocklist: new Set<string>(), now, maxTitles: 1 });
+  assert.deepEqual(result.selected.map(item => item.id), [2]);
+  assert.deepEqual(result.deferred.map(item => item.id), [1]);
 });
