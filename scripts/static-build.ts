@@ -55,7 +55,7 @@ export async function snapshotCatalogue(source: SqlClient, target: Awaited<Retur
     const pairs = JSON.stringify(selected.map(row => [row.id, row.type]));
     const parents = "(title_id,title_type) IN (SELECT json_extract(value,'$[0]'),json_extract(value,'$[1]') FROM json_each(?))";
     await insertRows(target.db, 'titles', await source.query("SELECT * FROM titles WHERE (id,type) IN (SELECT json_extract(value,'$[0]'),json_extract(value,'$[1]') FROM json_each(?))", [pairs]));
-    for (const table of ['credits', 'providers', 'ratings_ext']) await copyRows(source, target.db, table, '*', parents, [pairs], 100_000);
+    for (const table of ['credits', 'providers', 'ratings_ext', 'releases']) await copyRows(source, target.db, table, '*', parents, [pairs], 100_000);
     await copyRows(source, target.db, 'seasons', '*', "title_id IN (SELECT json_extract(value,'$[0]') FROM json_each(?) WHERE json_extract(value,'$[1]')='tv')", [pairs], 100_000);
     await copyRows(source, target.db, 'people', '*', `id IN (SELECT person_id FROM credits WHERE ${parents})`, [pairs], 100_000);
   }
