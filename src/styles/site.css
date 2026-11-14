@@ -290,3 +290,9 @@ body:not(.admin-shell) h1,.shelf-head h2{font-family:'Fraunces',Georgia,'Times N
 .top10-item .poster-item{width:112px;position:relative;z-index:1}
 @media(min-width:640px){.top10-item{padding-left:64px}.top10-num{font-size:158px;bottom:83px}.top10-item .poster-item{width:136px}}
 @media(min-width:1100px){.top10-item{padding-left:76px}.top10-num{font-size:188px}.top10-item .poster-item{width:156px}}
+
+/* Footer middle alignment (owner, 2026-11-14): the link rows, tagline
+   and copyright line all sit centered. */
+.site-footer{text-align:center}
+.site-footer nav{justify-content:center}
+.site-footer .copyright{margin-top:10px;font-size:12px}
