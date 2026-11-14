@@ -35,7 +35,7 @@ const payoutPct = data?.revenue ? Math.min(100, Math.round((data.revenue.balance
    Same read HealthReport renders below (same snooze filtering) — summary only. */
 const allHealth = module === 'dashboard' && actor ? await healthReport(env, actor) : [];
 const healthIssues = Astro.url.searchParams.get('show_snoozed') === '1' ? allHealth : allHealth.filter(row => !row.snoozed_until);
-const formatColors: Record<number, string> = { 32197577: '#f87171', 32197602: '#38bdf8', 32197641: '#4ade80', 32197642: '#c084fc', 32197643: '#f5b14c' };
+const formatColors: Record<number, string> = { 32197577: '#e07856', 32197602: '#d8c391', 32197641: '#7fb069', 32197642: '#b5658f', 32197643: '#c99b59' };
 const formatMaxImpressions = Math.max(...(data?.revenue?.formats.map(row => row.impressions) ?? []), 1);
 const dayInitials = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const syncStatusText = data?.sync[0]?.status || '';
@@ -126,7 +126,7 @@ if (module === 'ads') for (const [page, placements] of Object.entries(adMap)) fo
     {(module === 'links' || module === 'content') && <form class="admin-search" method="get"><label>Search {module === 'links' ? 'links' : 'titles'}<input name="q" value={data.query} maxlength="100" /></label><button type="submit">Search</button><a href={Astro.url.pathname}>Clear</a></form>}
     {module === 'links' && <>
       <p class="notice admin-note-info">When a visitor clicks one of these links: a country destination wins first, then a device one — otherwise the default destination is used. Click counts are approximate.</p>
-      <div class="admin-table"><table><thead><tr><th>Name / slug</th><th>Type</th><th>State</th><th>Approx. clicks</th><th>Edit</th></tr></thead><tbody>{data.links.map(row => <tr><td>{row.name}<small>/go/{row.slug}/</small>{data.deadLinks?.includes(row.slug) ? <small style="color:#f87171;font-weight:600">Destination dead — health check failing two days running</small> : ''}</td><td data-label="Type">{row.type}</td><td data-label="State">{row.enabled ? 'On' : 'Off'}</td><td data-label="Clicks (approx.)">≈ {row.clicks_total.toLocaleString()}</td><td><a href={`?edit=${encodeURIComponent(row.slug)}`}>Open</a></td></tr>)}</tbody></table></div>
+      <div class="admin-table"><table><thead><tr><th>Name / slug</th><th>Type</th><th>State</th><th>Approx. clicks</th><th>Edit</th></tr></thead><tbody>{data.links.map(row => <tr><td>{row.name}<small>/go/{row.slug}/</small>{data.deadLinks?.includes(row.slug) ? <small style="color:var(--bad);font-weight:600">Destination dead — health check failing two days running</small> : ''}</td><td data-label="Type">{row.type}</td><td data-label="State">{row.enabled ? 'On' : 'Off'}</td><td data-label="Clicks (approx.)">≈ {row.clicks_total.toLocaleString()}</td><td><a href={`?edit=${encodeURIComponent(row.slug)}`}>Open</a></td></tr>)}</tbody></table></div>
       <section class="catalogue-section"><h2>{link ? `Edit ${link.name}` : 'Add link'}</h2>{link && <a href="/admin/links/">Add a different link</a>}
       <form class="admin-form" method="post"><input type="hidden" name="original_slug" value={link?.slug || ''} /><input type="hidden" name="revision" value={link?.revision ?? -1} />
         <fieldset disabled={!canWrite}><label>Name *<input name="name" value={values('name', link?.name)} required maxlength="200" /></label>

@@ -12,8 +12,12 @@ you watch". Warm dark, print-editorial, one gold accent. Not a streaming clone.
 - **Palette (public)**: bg `#151515`, surface `#242424`, raised `#2b2b2b`,
   header `#1b1b1b`, text `#e9e4db` (warm paper), muted `#a79e8f`, line `#2e2a24`,
   accent/CTA gold `#c99b59` (dark text `#1a1408` on gold), hover `#b8894a`.
-  The coral red accent is retired from the public site. Admin keeps its own
-  neutral dark palette (separate chapter below).
+  The coral red accent is retired from the public site. The admin panel uses
+  this same palette (Karn, 2026-11-14: the panel must match the website theme
+  colours exactly) — its tokens map 1:1 (--bg #151515, --surface #242424,
+  --surface-2 #2b2b2b, --ink #e9e4db, --muted #a79e8f, --line #2e2a24,
+  --action/--brand gold #c99b59 with #1a1408 on-action text) — and the panel
+  renders in the device system font, not Archivo.
 - **Type**: Fraunces 600 (self-hosted subset, 11 KB, `public/fonts/fraunces-display.woff2`)
   for display — hero title, section headings, detail title, Top-10 numerals.
   Archivo stays the UI/body font. Metadata stays compact sans.
