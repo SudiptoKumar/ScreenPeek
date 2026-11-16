@@ -28,4 +28,13 @@ jobs:
         with:
           persist-credentials: false
       - name: Pull Adsterra stats, store, and alert
-        run: python3 scripts/money_check.py
+        shell: bash
+        run: |
+          set +e
+          python3 scripts/money_check.py 2>&1 | tee /tmp/money-check.log
+          code=${PIPESTATUS[0]}
+          if [ "$code" -ne 0 ] && grep -q "free tier daily row write limit" /tmp/money-check.log; then
+            echo "D1 daily write limit reached — this check rests until the limit resets at 00:00 UTC. Not a failure; alert state is stored in D1 and the next check after the reset catches up."
+            exit 0
+          fi
+          exit "$code"

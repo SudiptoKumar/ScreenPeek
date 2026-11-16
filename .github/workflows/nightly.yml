@@ -18,6 +18,11 @@ on:
         type: boolean
         required: false
         default: false
+      gate_test:
+        description: 'Test only: run the daily write-budget gate as if this were a scheduled run'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -48,7 +53,68 @@ jobs:
           cache: npm
       - name: Install locked dependencies
         run: npm ci --no-fund
+      - name: Daily write-budget gate
+        id: gate
+        shell: bash
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+          GATE_EVENT: ${{ github.event_name }}
+          GATE_TEST: ${{ inputs.gate_test }}
+        run: |
+          python3 - <<'PYEOF2'
+          import json, os, urllib.request, urllib.error
+          from datetime import datetime, timezone
+
+          def out(go, why):
+              print(why)
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                  f.write('go=' + ('true' if go else 'false') + '\n')
+              raise SystemExit(0)
+
+          # Manual runs are the owner's explicit instruction: never gated,
+          # unless the gate_test input asks to exercise the gate itself.
+          if os.environ.get('GATE_EVENT') != 'schedule' and os.environ.get('GATE_TEST') != 'true':
+              out(True, 'Gate: manual run — always proceeds.')
+
+          acct = os.environ['CLOUDFLARE_ACCOUNT_ID']; token = os.environ['CLOUDFLARE_API_TOKEN']
+          url = f"https://api.cloudflare.com/client/v4/accounts/{acct}/d1/database/{os.environ['D1_DATABASE_ID']}/query"
+
+          def query(sql, params=None):
+              body = json.dumps({'sql': sql, 'params': params or []}).encode()
+              r = urllib.request.Request(url, data=body, method='POST')
+              r.add_header('Authorization', 'Bearer ' + token); r.add_header('Content-Type', 'application/json')
+              try:
+                  with urllib.request.urlopen(r) as resp: return json.loads(resp.read().decode())
+              except urllib.error.HTTPError as e:
+                  try: return json.loads(e.read().decode())
+                  except Exception: return {'success': False, 'errors': [{'code': -1, 'message': f'HTTP {e.code}'}]}
+
+          today = datetime.now(timezone.utc).date().isoformat()
+          rows = 0
+          res = query("SELECT value FROM config WHERE key='sync_write_day'")
+          try:
+              saved = json.loads(res['result'][0]['results'][0]['value'])
+              if saved.get('day') == today: rows = int(saved.get('rows') or 0)
+          except Exception:
+              rows = 0
+          print(f'Gate: sync has written {rows} rows today (UTC {today}); daily sync budget is 95,000 of the 100,000 account limit.')
+          if rows >= 95000:
+              out(False, 'Gate: daily write budget spent — this run rests. No writes attempted, nothing failed; sync resumes after the 00:00 UTC reset.')
+
+          probe = query("INSERT INTO config(key,value,revision) VALUES('quota_probe',?,1) ON CONFLICT(key) DO UPDATE SET value=excluded.value, revision=revision+1",
+                        [datetime.now(timezone.utc).isoformat()])
+          errs = probe.get('errors') or []
+          if not probe.get('success'):
+              text = json.dumps(errs)
+              if '7500' in text or 'free tier daily row write limit' in text:
+                  out(False, 'Gate: the account write limit is already reached (other writers used the headroom) — this run rests until the 00:00 UTC reset.')
+              print(f'Gate: probe write returned an unexpected error ({text[:200]}) — proceeding; the sync will surface any real problem.')
+          out(True, 'Gate: budget remains — sync proceeds.')
+          PYEOF2
       - name: Sync catalogue and images
+        if: steps.gate.outputs.go == 'true'
         shell: bash
         env:
           SYNC_IDS: ${{ inputs.ids }}
@@ -74,7 +140,7 @@ jobs:
           # The CLI validates type-prefixed IDs; input is never evaluated as shell.
           npm run sync:run -- "${args[@]}"
       - name: Insight nightly jobs (auto-optimiser, retention, postbacks, health, alerts, report)
-        if: ${{ vars.SCREENPEEK_SYNC_ENABLED == '1' }}
+        if: ${{ vars.SCREENPEEK_SYNC_ENABLED == '1' && steps.gate.outputs.go == 'true' }}
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -90,6 +156,7 @@ jobs:
           node scripts/tool.mjs node scripts/insight_jobs.ts alerts
           node scripts/tool.mjs node scripts/insight_jobs.ts weekly-report
       - name: Build static hubs and top titles with long-tail Worker
+        if: steps.gate.outputs.go == 'true'
         env:
           STATIC_SOURCE_REMOTE: '1'
           DEPLOYMENT_ENV: production
@@ -102,7 +169,7 @@ jobs:
           SITE_URL: ${{ vars.SITE_URL }}
         run: npm run build
       - name: Deploy approved build and purge stale SSR cache
-        if: vars.SCREENPEEK_DEPLOY_ENABLED == '1' && (github.event_name == 'schedule' || inputs.deploy == true)
+        if: vars.SCREENPEEK_DEPLOY_ENABLED == '1' && steps.gate.outputs.go == 'true' && (github.event_name == 'schedule' || inputs.deploy == true)
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
