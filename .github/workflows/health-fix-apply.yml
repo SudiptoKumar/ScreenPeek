@@ -56,8 +56,9 @@ jobs:
           if not byid: raise SystemExit('ABORT: movie 1698863 not found in catalogue')
           fixes.append(('/movie/1698863/', f"/movie/{byid[0]['slug']}/"))
 
-          ody = rows("SELECT slug FROM titles WHERE type='movie' AND slug LIKE 'the-odyssey%' ORDER BY id LIMIT 2")
-          if len(ody) != 1: raise SystemExit(f'ABORT: expected exactly one Odyssey title, found {len(ody)}')
+          ody = rows("SELECT id,slug,year,popularity FROM titles WHERE type='movie' AND slug LIKE 'the-odyssey%' ORDER BY popularity DESC LIMIT 5")
+          if not ody: raise SystemExit('ABORT: no Odyssey movie found in catalogue')
+          for cand in ody: print('odyssey candidate:', cand)
           fixes.append(('/movie/the-odyssey/', f"/movie/{ody[0]['slug']}/"))
 
           for src, dst in fixes:
