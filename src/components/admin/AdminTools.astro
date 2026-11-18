@@ -35,8 +35,8 @@ const enc = encodeURIComponent;
 </section>
 <section class="catalogue-section"><h2>Run a job</h2>
   <p>Jobs run in GitHub Actions. The repository enable switches still decide whether a dispatched job actually executes, and the run link appears here after dispatch.</p>
-  <form method="post"><input type="hidden" name="action" value="run-job" /><input type="hidden" name="job" value="nightly" /><fieldset disabled={!write}><button class="primary" type="submit">Run daily sync now</button></fieldset></form>
-  <form method="post"><input type="hidden" name="action" value="run-job" /><input type="hidden" name="job" value="backup" /><fieldset disabled={!write}><button type="submit">Run private backup now</button></fieldset></form>
+  <form class="admin-form" method="post"><input type="hidden" name="action" value="run-job" /><input type="hidden" name="job" value="nightly" /><fieldset disabled={!write}><button class="primary" type="submit">Run daily sync now</button></fieldset></form>
+  <form class="admin-form" method="post"><input type="hidden" name="action" value="run-job" /><input type="hidden" name="job" value="backup" /><fieldset disabled={!write}><button type="submit">Run private backup now</button></fieldset></form>
 </section>
 <section class="catalogue-section"><h2>Purge cache</h2>
   <form class="admin-form" method="post"><input type="hidden" name="action" value="purge-cache" /><fieldset disabled={!write}><label>URL to purge (leave empty to purge everything)<input name="url" type="url" maxlength="2048" placeholder="https://your-domain/movie/a-title/" /></label><button type="submit">Purge cache</button></fieldset></form>

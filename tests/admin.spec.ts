@@ -30,18 +30,20 @@ test('admin verifies Access, enforces roles, creates a working link and ad witho
     await expect.poll(async () => (await worker.local.db.query<{ clicks_total: number }>("SELECT clicks_total FROM links WHERE slug='browser-managed'"))[0]?.clicks_total, { timeout: 15_000 }).toBe(1);
     await page.goto(`${worker.base}/admin/ads/`);
     const slot = page.locator('.admin-slot').filter({ has: page.getByRole('heading', { name: 'detail / native', exact: true }) });
+    await slot.locator('summary').click();
     await slot.getByLabel('Original code').fill('<div id="admin-created-ad">Admin test advertisement</div>');
     await slot.getByLabel('Enabled', { exact: true }).check();
     await slot.getByRole('button', { name: 'Save detail/native', exact: true }).click();
     await expect(page.locator('.notice[role="status"]')).toContainText('pending');
     await page.goto(`${worker.base}/admin/settings/`);
     const master = page.locator('form').filter({ has: page.getByLabel('Master ads switch', { exact: true }) });
-    await master.getByLabel('Master ads switch', { exact: true }).fill('1');
+    await master.getByLabel('Master ads switch', { exact: true }).check();
     await master.getByRole('button').click();
     const slug = (await worker.local.db.query<{ slug: string }>("SELECT slug FROM titles WHERE id=-10001 AND type='movie'"))[0].slug;
     await page.goto(`${worker.base}/movie/${slug}/`);
     await expect(page.locator('#admin-created-ad')).toHaveText('Admin test advertisement');
     await page.goto(`${worker.base}/admin/ads/`);
+    await slot.locator('summary').click();
     await slot.getByLabel('Authenticated test mode', { exact: true }).check();
     await slot.getByRole('button', { name: 'Save detail/native', exact: true }).click();
     await expect(page.locator('.notice[role="status"]')).toContainText('pending');
@@ -82,12 +84,12 @@ test('admin verifies Access, enforces roles, creates a working link and ad witho
     await page.screenshot({ path: '.cache/admin-mobile.png', fullPage: false });
     await page.goto(`${worker.base}/admin/settings/`);
     const maintenance = page.locator('form').filter({ has: page.getByLabel('Maintenance mode', { exact: true }) });
-    await maintenance.getByLabel('Maintenance mode', { exact: true }).fill('1'); await maintenance.getByRole('button').click();
+    await maintenance.getByLabel('Maintenance mode', { exact: true }).check(); await maintenance.getByRole('button').click();
     await expect(page.locator('.notice[role="status"]')).toContainText('pending');
     expect((await page.goto(`${worker.base}/movies/`))?.status()).toBe(503);
     await expect(page.getByRole('heading', { name: 'We’ll be back soon.' })).toBeVisible();
     expect((await page.goto(`${worker.base}/admin/settings/`))?.status()).toBe(200);
-    await maintenance.getByLabel('Maintenance mode', { exact: true }).fill('0'); await maintenance.getByRole('button').click();
+    await maintenance.getByLabel('Maintenance mode', { exact: true }).uncheck(); await maintenance.getByRole('button').click();
     await expect(page.locator('.notice[role="status"]')).toContainText('pending');
     expect((await page.goto(`${worker.base}/movies/`))?.status()).toBe(200);
   } finally { await context.close(); await worker.dispose(); }
