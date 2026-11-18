@@ -81,6 +81,8 @@ jobs:
 
           issues.append(('quota-unavailable', 'Live quota telemetry unavailable (info, permanent)'))
 
+          wd = query("SELECT value FROM config WHERE key='sync_write_day'")
+          print('SYNC_WRITE_DAY:', wd[0]['value'] if wd else 'unset')
           print(f'TOTAL ISSUES: {len(issues)}')
           for i, (key, msg) in enumerate(issues, 1):
               print(f'{i:3d}. [{key}] {msg}')
