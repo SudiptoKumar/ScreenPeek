@@ -1,0 +1,80 @@
+name: Health fixes (manual)
+
+# One-by-one fixes for the admin health list:
+#  1) Redirects for the three wrong-address movie visits, with targets
+#     looked up from the live catalogue (aborts if a title is missing).
+#  2) Clears the notfound_log rows those fixes resolve, plus the rows
+#     for paths that are live now (verification file, /sw.js).
+# Bot probes and past-the-end page walks stay: their 404s are correct.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fix:
+    if: vars.SCREENPEEK_SYNC_ENABLED == '1' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+    steps:
+      - name: Apply health fixes
+        run: |
+          python3 - <<'PYEOF'
+          import json, os, urllib.request, urllib.error
+
+          acct = os.environ['CLOUDFLARE_ACCOUNT_ID']; token = os.environ['CLOUDFLARE_API_TOKEN']
+          url = f"https://api.cloudflare.com/client/v4/accounts/{acct}/d1/database/{os.environ['D1_DATABASE_ID']}/query"
+
+          def query(sql, params=None):
+              body = json.dumps({'sql': sql, 'params': params or []}).encode()
+              r = urllib.request.Request(url, data=body, method='POST')
+              r.add_header('Authorization', 'Bearer ' + token); r.add_header('Content-Type', 'application/json')
+              try:
+                  with urllib.request.urlopen(r) as resp: data = json.loads(resp.read().decode())
+              except urllib.error.HTTPError as e:
+                  raise SystemExit(f'D1 HTTP {e.code}: ' + e.read().decode('utf-8', 'replace')[:300])
+              if not data.get('success'):
+                  raise SystemExit('D1 error: ' + json.dumps(data.get('errors'))[:300])
+              return data['result'][0]
+
+          def rows(sql, params=None):
+              return query(sql, params)['results']
+
+          fixes = []
+
+          shaw = rows("SELECT slug FROM titles WHERE imdb_id='tt0111161' AND type='movie' LIMIT 1")
+          if not shaw: raise SystemExit('ABORT: Shawshank (tt0111161) not found in catalogue')
+          fixes.append(('/movie/tt0111161/', f"/movie/{shaw[0]['slug']}/"))
+
+          byid = rows("SELECT slug FROM titles WHERE id=1698863 AND type='movie' LIMIT 1")
+          if not byid: raise SystemExit('ABORT: movie 1698863 not found in catalogue')
+          fixes.append(('/movie/1698863/', f"/movie/{byid[0]['slug']}/"))
+
+          ody = rows("SELECT slug FROM titles WHERE type='movie' AND slug LIKE 'the-odyssey%' ORDER BY id LIMIT 2")
+          if len(ody) != 1: raise SystemExit(f'ABORT: expected exactly one Odyssey title, found {len(ody)}')
+          fixes.append(('/movie/the-odyssey/', f"/movie/{ody[0]['slug']}/"))
+
+          for src, dst in fixes:
+              if src == dst:
+                  print(f'skip (already canonical): {src}')
+                  continue
+              query('INSERT INTO redirects(from_path,to_target,type) VALUES(?,?,301) ON CONFLICT(from_path) DO UPDATE SET to_target=excluded.to_target,type=301,deleted_at=NULL', [src, dst])
+              print(f'redirect: {src} -> {dst}')
+
+          clear = [src for src, _ in fixes] + ['/e130c7fb16c3382ca68f.txt', '/sw.js']
+          for path in clear:
+              res = query('DELETE FROM notfound_log WHERE path=?', [path])
+              print(f'notfound cleared: {path} (rows affected: {res.get("meta", {}).get("changes")})')
+
+          print('--- readback: redirects ---')
+          for row in rows('SELECT from_path,to_target,type,deleted_at FROM redirects WHERE from_path IN (?,?,?)', [f[0] for f in fixes]):
+              print(row)
+          left = rows('SELECT COUNT(*) AS n FROM notfound_log WHERE count>0')
+          print('notfound rows remaining:', left[0]['n'])
+          PYEOF
