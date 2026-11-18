@@ -34,7 +34,7 @@ test('native v2 Undo mirrors original code, rejects stale/unauthorized changes a
     await assert.rejects(advancedAction(env, owner, 'seo', new URLSearchParams({ action: 'save-redirect', from_path: '/new/', to_target: '/old/' }), fetcher), /loop/);
     await advancedAction(env, { ...owner, role: 'editor' }, 'seo', new URLSearchParams({ action: 'save-verification', key: 'google_site_verification', value: 'fixture-code' }), fetcher);
     assert.equal(await env.CONFIG.get('config:google_site_verification'), 'fixture-code');
-    await local.db.batch([{ sql: "INSERT INTO titles(id,type,slug,title) VALUES(1,'movie','one','One')" }, { sql: "INSERT INTO genres(slug,name,title_count) VALUES('drama','Drama',1)" }, { sql: "INSERT INTO title_genres(title_id,title_type,genre_slug) VALUES(1,'movie','drama')" }]);
+    await local.db.batch([{ sql: "INSERT INTO titles(id,type,slug,title,quality_gate) VALUES(1,'movie','one','One',1)" }, { sql: "INSERT INTO genres(slug,name,title_count) VALUES('drama','Drama',1)" }, { sql: "INSERT INTO title_genres(title_id,title_type,genre_slug) VALUES(1,'movie','drama')" }]);
     await applyAdminAction(env, owner, 'content', new URLSearchParams({ id: '1', type: 'movie', hidden: '1', revision: '0' }), fetcher);
     const visibilityLog = (await local.db.query("SELECT id FROM admin_log WHERE entity='content' ORDER BY id DESC LIMIT 1"))[0];
     await undoChange(env, owner, Number(visibilityLog.id), fetcher);

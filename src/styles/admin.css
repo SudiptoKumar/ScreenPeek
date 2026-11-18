@@ -3,7 +3,7 @@
 
    Design notes
    - Phone first. Every tap target is 44px or more, inputs are 16px so iOS does not zoom.
-   - Quiet by default: the website theme colours (warm dark + gold), no gradients, no glow. Colour is kept for meaning
+   - Quiet by default: the website theme colours (dark + coral), no gradients, no glow. Colour is kept for meaning
      (good, careful, problem), and every status also has a word or a shape, never colour alone.
    - One memorable thing: the earnings card is cut like a ticket stub.
    - Numbers are big, heavy and tightly spaced, like a box-office board. */
@@ -436,3 +436,30 @@ html { scroll-padding-top: 76px; scroll-padding-bottom: 120px; }
 .admin-shell .skip { position: absolute; left: -999px; top: 0; z-index: 50; background: var(--surface); color: var(--ink); padding: 10px 16px; border: 1px solid var(--line-strong); border-radius: 0 0 10px 0; font-weight: 600; }
 .admin-shell .skip:focus { left: 0; }
 @media (max-width: 640px) { .admin-shell .admin-table td[data-label] { min-width: 0; } }
+
+/* ---------- advanced records + collapsible editors ---------- */
+.admin-shell .admin-records { margin: 16px 0; }
+.admin-shell .admin-records > summary { color: var(--muted); font-size: 14.5px; padding: 4px 2px; }
+.admin-shell .admin-records > summary:hover { color: var(--ink); }
+.admin-shell .admin-records[open] > summary { color: var(--ink); }
+.admin-shell .admin-records .catalogue-section { margin-top: 10px; }
+.admin-shell .records-form { max-width: none; }
+.admin-shell .slot-edit { margin-top: 4px; }
+.admin-shell .slot-edit > summary { color: var(--muted); font-size: 14.5px; }
+.admin-shell .slot-edit > summary:hover { color: var(--ink); }
+.admin-shell .slot-edit[open] > summary { color: var(--ink); }
+
+/* ---------- on/off switches (post the same value field as 1/0) ---------- */
+.admin-shell .admin-form label.admin-switch { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.admin-shell .admin-switch input {
+  appearance: none; -webkit-appearance: none; flex: 0 0 auto; position: relative; cursor: pointer;
+  width: 52px; height: 30px; min-height: 0; padding: 0; border-radius: 999px;
+  background: var(--surface-2); border: 1px solid var(--line-strong);
+}
+.admin-shell .admin-switch input::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 24px; height: 24px;
+  border-radius: 50%; background: var(--muted); transition: left .15s ease, background .15s ease;
+}
+.admin-shell .admin-switch input:checked { background: var(--action); border-color: var(--action); }
+.admin-shell .admin-switch input:checked::after { left: 24px; background: #fff; }
+.admin-shell .admin-switch input:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }

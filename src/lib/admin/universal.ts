@@ -85,9 +85,9 @@ export async function usedIn(env: AdminEnvironment,name:string,row:AdminRow) {
   return 0;
 }
 function refreshCounts(env:AdminEnvironment){return [
-  env.DB.prepare('UPDATE genres SET title_count=(SELECT COUNT(*) FROM title_genres g JOIN titles t ON t.id=g.title_id AND t.type=g.title_type WHERE g.genre_slug=genres.slug AND t.hidden=0 AND t.deleted=0 AND t.deleted_at IS NULL)'),
-  env.DB.prepare('UPDATE languages SET title_count=(SELECT COUNT(*) FROM titles t WHERE t.original_language=languages.slug AND t.hidden=0 AND t.deleted=0 AND t.deleted_at IS NULL)'),
-  env.DB.prepare('UPDATE collections SET title_count=(SELECT COUNT(*) FROM collection_titles c JOIN titles t ON t.id=c.title_id AND t.type=c.title_type WHERE c.collection_slug=collections.slug AND t.hidden=0 AND t.deleted=0 AND t.deleted_at IS NULL)')
+  env.DB.prepare('UPDATE genres SET title_count=(SELECT COUNT(*) FROM title_genres g JOIN titles t ON t.id=g.title_id AND t.type=g.title_type WHERE g.genre_slug=genres.slug AND t.hidden=0 AND t.deleted=0 AND t.deleted_at IS NULL AND t.quality_gate=1)'),
+  env.DB.prepare('UPDATE languages SET title_count=(SELECT COUNT(*) FROM titles t WHERE t.original_language=languages.slug AND t.hidden=0 AND t.deleted=0 AND t.deleted_at IS NULL AND t.quality_gate=1)'),
+  env.DB.prepare('UPDATE collections SET title_count=(SELECT COUNT(*) FROM collection_titles c JOIN titles t ON t.id=c.title_id AND t.type=c.title_type WHERE c.collection_slug=collections.slug AND t.hidden=0 AND t.deleted=0 AND t.deleted_at IS NULL AND t.quality_gate=1)')
 ];}
 const mirrorsFor=(name:string,row:AdminRow):MirrorRef[]=>name==='links'?[{kind:'link',id:String(row.slug)}]:name==='ad_slots'?[{kind:'ad',page:String(row.page_type) as 'detail',placement:String(row.placement) as 'native'}]:[];
 function fieldValue(field:string,value:string):string|number|null {
@@ -219,7 +219,7 @@ export async function universalAction(env:AdminEnvironment,actor:AdminIdentity,m
       if(membershipChanged){
         statements.push(env.DB.prepare('DELETE FROM collection_titles WHERE collection_slug=?').bind(current.slug));
         statements.push(env.DB.prepare("INSERT INTO collection_titles(collection_slug,title_id,title_type,source) SELECT ?,json_extract(value,'$[0]'),json_extract(value,'$[1]'),'manual' FROM json_each(?)").bind(current.slug,JSON.stringify(selected.pairs)));
-        statements.push(env.DB.prepare('UPDATE collections SET title_count=(SELECT COUNT(*) FROM collection_titles c JOIN titles t ON t.id=c.title_id AND t.type=c.title_type WHERE c.collection_slug=? AND t.hidden=0 AND t.deleted=0 AND t.deleted_at IS NULL) WHERE slug=?').bind(current.slug,current.slug));
+        statements.push(env.DB.prepare('UPDATE collections SET title_count=(SELECT COUNT(*) FROM collection_titles c JOIN titles t ON t.id=c.title_id AND t.type=c.title_type WHERE c.collection_slug=? AND t.hidden=0 AND t.deleted=0 AND t.deleted_at IS NULL AND t.quality_gate=1) WHERE slug=?').bind(current.slug,current.slug));
       }
     }
     if(name==='collections'&&!String(next.name||'').trim())throw new AdminError('A collection name is required.');
@@ -233,9 +233,9 @@ export async function universalAction(env:AdminEnvironment,actor:AdminIdentity,m
   }
   if(statements.length>35)throw new AdminError('This operation exceeds its free-tier statement budget; choose fewer items.');
   if (name === 'titles') {
-    statements.push(env.DB.prepare('UPDATE genres SET title_count=(SELECT COUNT(*) FROM title_genres g JOIN titles t ON t.id=g.title_id AND t.type=g.title_type WHERE g.genre_slug=genres.slug AND t.hidden=0 AND t.deleted=0 AND t.deleted_at IS NULL)'));
-    statements.push(env.DB.prepare('UPDATE languages SET title_count=(SELECT COUNT(*) FROM titles t WHERE t.original_language=languages.slug AND t.hidden=0 AND t.deleted=0 AND t.deleted_at IS NULL)'));
-    statements.push(env.DB.prepare('UPDATE collections SET title_count=(SELECT COUNT(*) FROM collection_titles c JOIN titles t ON t.id=c.title_id AND t.type=c.title_type WHERE c.collection_slug=collections.slug AND t.hidden=0 AND t.deleted=0 AND t.deleted_at IS NULL)'));
+    statements.push(env.DB.prepare('UPDATE genres SET title_count=(SELECT COUNT(*) FROM title_genres g JOIN titles t ON t.id=g.title_id AND t.type=g.title_type WHERE g.genre_slug=genres.slug AND t.hidden=0 AND t.deleted=0 AND t.deleted_at IS NULL AND t.quality_gate=1)'));
+    statements.push(env.DB.prepare('UPDATE languages SET title_count=(SELECT COUNT(*) FROM titles t WHERE t.original_language=languages.slug AND t.hidden=0 AND t.deleted=0 AND t.deleted_at IS NULL AND t.quality_gate=1)'));
+    statements.push(env.DB.prepare('UPDATE collections SET title_count=(SELECT COUNT(*) FROM collection_titles c JOIN titles t ON t.id=c.title_id AND t.type=c.title_type WHERE c.collection_slug=collections.slug AND t.hidden=0 AND t.deleted=0 AND t.deleted_at IS NULL AND t.quality_gate=1)'));
   }
   // Every row is checked before one atomic mutation/audit/outbox batch.
   const token=crypto.randomUUID();

@@ -35,6 +35,7 @@ test('native universal lists filter/page/export, bulk audit atomically, Trash/Un
   assert.deepEqual((await listTitles(env.DB,{mode:'top10',includeUngated:true})).titles.map(row=>row.id),[-10011,-10010]);
   await local.db.batch([{sql:"UPDATE homepage_sections SET enabled=0 WHERE key='top10'"}]);
   assert.deepEqual((await listTitles(env.DB,{mode:'top10',includeUngated:true})).titles.map(row=>row.id),[-10011,-10010]);
+  await local.db.batch([{sql:"UPDATE titles SET quality_gate=1 WHERE id IN(-10010,-10011) AND type='movie'"}]);
   await universalAction(env,owner,'content',new URLSearchParams({list:'collections',u_action:'add',u_slug:'owner-picks',u_name:'Owner picks',u_starts_at:'',u_ends_at:''}));
   await universalAction(env,owner,'content',new URLSearchParams({list:'collections',u_action:'save',u_key:'["owner-picks"]',u_revision:'0',u_name:'Owner picks',u_starts_at:'',u_ends_at:'',u_members:'movie:-10010,movie:-10011'}));
   assert.equal((await local.db.query("SELECT title_count FROM collections WHERE slug='owner-picks'"))[0].title_count,2);
