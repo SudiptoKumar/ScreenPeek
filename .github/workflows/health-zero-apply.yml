@@ -1,0 +1,60 @@
+name: Health zero (manual)
+
+# Data half of the "panel to zero" fix (owner-approved 2026-11-19):
+#  1) Hide the three titles whose TMDb overview is completely empty
+#     (they are already excluded from public listings; reversible).
+#     The UPDATE only touches a row while its overview is still empty.
+#  2) Clear the visited-404 log for a fresh start under the new rule
+#     (the panel now flags a path only at 5+ visits).
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  zero:
+    if: vars.SCREENPEEK_SYNC_ENABLED == '1' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+    steps:
+      - name: Hide empty-overview titles and clear the 404 log
+        run: |
+          python3 - <<'PYEOF'
+          import json, os, urllib.request, urllib.error
+
+          acct = os.environ['CLOUDFLARE_ACCOUNT_ID']; token = os.environ['CLOUDFLARE_API_TOKEN']
+          url = f"https://api.cloudflare.com/client/v4/accounts/{acct}/d1/database/{os.environ['D1_DATABASE_ID']}/query"
+
+          def query(sql, params=None):
+              body = json.dumps({'sql': sql, 'params': params or []}).encode()
+              r = urllib.request.Request(url, data=body, method='POST')
+              r.add_header('Authorization', 'Bearer ' + token); r.add_header('Content-Type', 'application/json')
+              try:
+                  with urllib.request.urlopen(r) as resp: data = json.loads(resp.read().decode())
+              except urllib.error.HTTPError as e:
+                  raise SystemExit(f'D1 HTTP {e.code}: ' + e.read().decode('utf-8', 'replace')[:300])
+              if not data.get('success'):
+                  raise SystemExit('D1 error: ' + json.dumps(data.get('errors'))[:300])
+              return data['result'][0]
+
+          targets = [('tv', 173), ('movie', 5442), ('tv', 14670)]
+          for typ, tid in targets:
+              before = query('SELECT id,type,title,hidden,length(trim(coalesce(overview,\'\'))) AS ovlen FROM titles WHERE type=? AND id=?', [typ, tid])['results']
+              print('target:', before)
+              if not before: raise SystemExit(f'ABORT: {typ}:{tid} not found')
+              if before[0]['ovlen'] != 0: raise SystemExit(f"ABORT: {typ}:{tid} overview is no longer empty ({before[0]['ovlen']} chars) — not hiding")
+              res = query("UPDATE titles SET hidden=1 WHERE type=? AND id=? AND (overview IS NULL OR trim(overview)='')", [typ, tid])
+              after = query('SELECT id,type,title,hidden FROM titles WHERE type=? AND id=?', [typ, tid])['results']
+              print('hidden now:', after, '| rows changed:', res.get('meta', {}).get('changes'))
+
+          res = query('DELETE FROM notfound_log')
+          print('notfound_log cleared, rows removed:', res.get('meta', {}).get('changes'))
+          left = query('SELECT COUNT(*) AS n FROM notfound_log')['results']
+          print('notfound rows remaining:', left[0]['n'])
+          PYEOF
