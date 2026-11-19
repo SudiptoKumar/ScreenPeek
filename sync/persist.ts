@@ -22,6 +22,11 @@ export async function persistTitle(
     quality_gate: 0, added_at: data.title.updated_at,
   };
   if (media.posterColor !== undefined) row.poster_color = media.posterColor;
+  // Owner rule (2026-11-19): a title with no overview text at all is stored
+  // hidden, so it never reaches the listings or the admin health list. When
+  // an overview is present, `hidden` is left out of the write entirely, so a
+  // later sync never overrides an admin's manual hide or unhide.
+  if (!row.overview || !String(row.overview).trim()) row.hidden = 1;
   const columns = Object.keys(row);
   const parameters: SqlValue[] = [];
   const values = columns.map(column => {
@@ -130,9 +135,9 @@ export async function refreshCounts(db: SqlClient) {
   // The WHERE guards matter: without them every run rewrites every row
   // of these tables (each one a counted D1 write) even when no count
   // changed. Only rows whose count actually moved are written now.
-  const genresCount = `(SELECT count(*) FROM title_genres g JOIN titles t ON t.id=g.title_id AND t.type=g.title_type WHERE g.genre_slug=genres.slug AND t.hidden=0 AND t.deleted=0 AND t.deleted_at IS NULL AND t.quality_gate=1)`;
-  const languagesCount = `(SELECT count(*) FROM titles t WHERE t.original_language=languages.slug AND t.hidden=0 AND t.deleted=0 AND t.deleted_at IS NULL AND t.quality_gate=1)`;
-  const collectionsCount = `(SELECT count(*) FROM collection_titles c JOIN titles t ON t.id=c.title_id AND t.type=c.title_type WHERE c.collection_slug=collections.slug AND t.hidden=0 AND t.deleted=0 AND t.deleted_at IS NULL AND t.quality_gate=1)`;
+  const genresCount = `(SELECT count(*) FROM title_genres g JOIN titles t ON t.id=g.title_id AND t.type=g.title_type WHERE g.genre_slug=genres.slug AND t.hidden=0 AND t.deleted=0 AND t.deleted_at IS NULL)`;
+  const languagesCount = `(SELECT count(*) FROM titles t WHERE t.original_language=languages.slug AND t.hidden=0 AND t.deleted=0 AND t.deleted_at IS NULL)`;
+  const collectionsCount = `(SELECT count(*) FROM collection_titles c JOIN titles t ON t.id=c.title_id AND t.type=c.title_type WHERE c.collection_slug=collections.slug AND t.hidden=0 AND t.deleted=0 AND t.deleted_at IS NULL)`;
   return db.batch([
     { sql: `UPDATE genres SET title_count=${genresCount} WHERE title_count <> ${genresCount}` },
     { sql: `UPDATE languages SET title_count=${languagesCount} WHERE title_count <> ${languagesCount}` },

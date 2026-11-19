@@ -130,3 +130,25 @@ test('actual local D1 persists atomically, preserves edits and prevents deleted/
     await rm(state, { recursive: true, force: true });
   }
 });
+
+test('titles with an empty overview are stored hidden and are not unhidden by a later sync', { timeout: 60_000 }, async () => {
+  await mkdir('.cache', { recursive: true });
+  const state = await mkdtemp(resolve('.cache/persist-hidden-'));
+  const bindings = await localBindings(state);
+  const { db } = bindings;
+  try {
+    await applyLocalSql(bindings.database, await readFile('db/schema.sql', 'utf8'));
+    await applyLocalSql(bindings.database, await readFile('db/migrations/001-sync-metadata.sql', 'utf8'));
+    await persistTitle(db, transform(source(7001, { overview: '' })), media);
+    assert.equal((await db.query('SELECT hidden FROM titles WHERE id=7001'))[0].hidden, 1, 'empty overview starts hidden');
+    await persistTitle(db, transform(source(7002, { title: 'Visible Title' })), media);
+    assert.equal((await db.query('SELECT hidden FROM titles WHERE id=7002'))[0].hidden, 0, 'a real overview stays visible');
+    await persistTitle(db, transform(source(7001)), media);
+    assert.equal((await db.query('SELECT hidden FROM titles WHERE id=7001'))[0].hidden, 1, 'the overview arriving later does not unhide on its own');
+    await persistTitle(db, transform(source(7002, { title: 'Visible Title', overview: '' })), media);
+    assert.equal((await db.query('SELECT hidden FROM titles WHERE id=7002'))[0].hidden, 1, 'an overview disappearing hides the title');
+  } finally {
+    await bindings.dispose();
+    await rm(state, { recursive: true, force: true });
+  }
+});
