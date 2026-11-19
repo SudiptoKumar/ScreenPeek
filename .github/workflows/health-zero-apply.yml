@@ -43,7 +43,7 @@ jobs:
                   raise SystemExit('D1 error: ' + json.dumps(data.get('errors'))[:300])
               return data['result'][0]
 
-          targets = [('tv', 173), ('movie', 5442), ('tv', 14670)]
+          targets = [('tv', 173), ('movie', 5442), ('tv', 14670), ('tv', 15159)]
           for typ, tid in targets:
               before = query('SELECT id,type,title,hidden,length(trim(coalesce(overview,\'\'))) AS ovlen FROM titles WHERE type=? AND id=?', [typ, tid])['results']
               print('target:', before)
