@@ -22,11 +22,16 @@ export interface TmdbClientOptions {
 
 export class TmdbError extends Error {
   readonly status: number;
-  constructor(status: number) {
+  readonly endpoint?: string;
+  constructor(status: number, endpoint?: string) {
     // Do not include response bodies or URLs: they can echo authentication data.
+    // The endpoint label is only the request path (plus page), built from
+    // allowlisted constants and validated numeric IDs; auth travels in the
+    // header or query string, never in the path, so the label is safe to log.
     super(`TMDb request failed (HTTP ${status})`);
     this.name = 'TmdbError';
     this.status = status;
+    if (endpoint) this.endpoint = endpoint;
   }
 }
 
@@ -118,10 +123,17 @@ export class TmdbClient {
     const url = new URL(path, this.base);
     url.searchParams.set('language', 'en-US');
     for (const [key, value] of Object.entries(params)) url.searchParams.set(key, String(value));
-    return this.response(url, true, async response => {
-      try { return await response.json() as T; }
-      catch { throw new Error('TMDb returned invalid JSON'); }
-    });
+    try {
+      return await this.response(url, true, async response => {
+        try { return await response.json() as T; }
+        catch { throw new Error('TMDb returned invalid JSON'); }
+      });
+    } catch (error) {
+      if (error instanceof TmdbError && !error.endpoint) {
+        throw new TmdbError(error.status, params.page !== undefined ? `${path} page ${params.page}` : path);
+      }
+      throw error;
+    }
   }
 
   private id(id: number) {

@@ -2,6 +2,7 @@ import { purgeExpiredTrash } from './trash.ts';
 import { posterColour } from './colour.ts';
 import { composeOg } from './og.ts';
 import type { MediaType, TmdbClient } from './tmdb.ts';
+import { TmdbError } from './tmdb.ts';
 import type { Candidate, ExistingTitleState, SourcePerson } from './types.ts';
 import { titleKey } from './types.ts';
 import type { SqlClient, SqlStatement } from './storage.ts';
@@ -384,7 +385,7 @@ export async function runSync(options: {
   } catch (error) {
     // Raw upstream errors stay out of the summary (they can carry URLs
     // and tokens); the detail goes to the server log only.
-    console.error('Sync infrastructure failure:', error);
+    console.error('Sync infrastructure failure:', error instanceof TmdbError && error.endpoint ? `${error.message} [${error.endpoint}]` : error);
     if (error instanceof Error && error.message.includes('HTTP 429')) {
       warn('Database rate limit reached near the end of the run; unfinished work stays queued for the next run.');
       summary.status = 'partial';
