@@ -17,7 +17,11 @@ function checkedNow(now: Date) {
 
 async function pages<T>(request: (page: number) => Promise<TmdbPage<T>>, limit = Number.POSITIVE_INFINITY) {
   const results: T[] = [];
-  for (let page = 1; page <= limit; page++) {
+  // TMDb serves at most 500 pages per feed and rejects page 501 with
+  // HTTP 400. A feed reporting more pages (the person-changes feed crossed
+  // that line on 2026-11-20 and stopped every sync) is read up to the cap.
+  const cap = Math.min(limit, 500);
+  for (let page = 1; page <= cap; page++) {
     const response = await request(page);
     if (!Array.isArray(response.results) || !Number.isSafeInteger(response.total_pages) || response.total_pages < 0 || response.page !== page) {
       throw new Error('Source returned invalid pagination');

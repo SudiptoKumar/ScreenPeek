@@ -148,3 +148,16 @@ test('new titles outrank top-rated updates globally (owner rule, 2026-11-14)', (
   assert.deepEqual(result.selected.map(item => item.id), [2]);
   assert.deepEqual(result.deferred.map(item => item.id), [1]);
 });
+
+test('a feed reporting more than 500 pages is read only up to the TMDb page cap', async () => {
+  const maxPage = new Map<string, number>();
+  const client = emptyClient();
+  client.changes = async (type, _start, _end, current = 1) => {
+    maxPage.set(type, Math.max(maxPage.get(type) ?? 0, current));
+    return page([], current, 600);
+  };
+  await collectCandidates(client, { now });
+  assert.equal(maxPage.get('person'), 500, 'person changes stop at page 500, never 501');
+  assert.equal(maxPage.get('movie'), 500);
+  assert.equal(maxPage.get('tv'), 500);
+});
