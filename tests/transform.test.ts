@@ -41,13 +41,13 @@ test('movie transform keeps top12 cast, launch providers, trailer and date metad
   assert.deepEqual(result.images.gallery, ['/backdrop.jpg']);
 });
 
-test('quality gate requires an owned poster, overview, popularity and cast or providers', () => {
+test('quality gate requires only an owned poster (owner rule, 2026-11-20)', () => {
   const base = { posterR2: 'poster/10.webp', overview: 'x'.repeat(80), popularity: 10, castCount: 3, providerCount: 0 };
   assert.equal(qualityGate(base), 1);
   assert.equal(qualityGate({ ...base, posterR2: null }), 0);
-  assert.equal(qualityGate({ ...base, overview: 'short' }), 0);
-  assert.equal(qualityGate({ ...base, popularity: 9 }), 0);
-  assert.equal(qualityGate({ ...base, castCount: 2 }), 0);
+  assert.equal(qualityGate({ ...base, overview: 'short' }), 1);
+  assert.equal(qualityGate({ ...base, popularity: 9 }), 1);
+  assert.equal(qualityGate({ ...base, castCount: 2 }), 1);
   assert.equal(qualityGate({ ...base, castCount: 0, providerCount: 1 }), 1);
   assert.equal(transformTitle(source, 'movie', { now, usedSlugs: new Set(), posterR2: 'poster/10.webp' }).title.quality_gate, 1);
 });

@@ -110,8 +110,8 @@ export async function persistTitle(
     });
   }
   statements.push({
-    sql: `UPDATE titles SET quality_gate=CASE WHEN poster_r2 IS NOT NULL AND length(trim(poster_r2))>0 AND length(overview)>=80 AND popularity>=? AND ((SELECT count(*) FROM credits c WHERE c.title_id=titles.id AND c.title_type=titles.type AND c.role='cast')>=3 OR EXISTS(SELECT 1 FROM providers p WHERE p.title_id=titles.id AND p.title_type=titles.type)) THEN 1 ELSE 0 END WHERE id=? AND type=? AND ${guard()}`,
-    params: [threshold, id, type, id, type],
+    sql: `UPDATE titles SET quality_gate=CASE WHEN poster_r2 IS NOT NULL AND length(trim(poster_r2))>0 THEN 1 ELSE 0 END WHERE id=? AND type=? AND ${guard()}`,
+    params: [id, type, id, type],
   }, {
     sql: `DELETE FROM titles_fts WHERE slug=(SELECT slug FROM titles WHERE id=? AND type=?) AND ${guard()}`,
     params: [id, type, id, type],

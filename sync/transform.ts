@@ -40,8 +40,12 @@ export function qualityGate(input: {
   posterR2?: string | null; overview: string; popularity: number;
   castCount: number; providerCount: number;
 }, threshold = 10) {
-  return Number(Boolean(input.posterR2) && input.overview.length >= 80 && input.popularity >= threshold
-    && (input.castCount >= 3 || input.providerCount > 0));
+  // Owner rule (2026-11-20): a stored poster is the whole gate. Overview
+  // length, popularity and cast/provider presence no longer keep a title
+  // out of listings, search or the sitemap. The other inputs stay in the
+  // signature for callers, but they no longer decide the gate.
+  void threshold;
+  return Number(Boolean(input.posterR2));
 }
 
 function date(value: unknown) {

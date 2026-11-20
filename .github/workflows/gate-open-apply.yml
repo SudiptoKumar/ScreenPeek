@@ -1,0 +1,60 @@
+name: Gate open (manual)
+
+# Owner decision (2026-11-20): the quality gate is now POSTER ONLY — every
+# title with a stored poster is "ready for search engines". This one-off
+# recompute brings the stored flags in line with the new rule (the sync's
+# own recompute only touches titles as they are next updated). Only rows
+# whose flag actually changes are written. Readbacks print before/after.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    if: vars.SCREENPEEK_SYNC_ENABLED == '1' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+    steps:
+      - name: Recompute quality_gate as poster-only for all titles
+        run: |
+          python3 - <<'PYEOF'
+          import json, os, urllib.request, urllib.error
+
+          acct = os.environ['CLOUDFLARE_ACCOUNT_ID']; token = os.environ['CLOUDFLARE_API_TOKEN']
+          url = f"https://api.cloudflare.com/client/v4/accounts/{acct}/d1/database/{os.environ['D1_DATABASE_ID']}/query"
+
+          def query(sql, params=None):
+              body = json.dumps({'sql': sql, 'params': params or []}).encode()
+              r = urllib.request.Request(url, data=body, method='POST')
+              r.add_header('Authorization', 'Bearer ' + token); r.add_header('Content-Type', 'application/json')
+              try:
+                  with urllib.request.urlopen(r) as resp: data = json.loads(resp.read().decode())
+              except urllib.error.HTTPError as e:
+                  raise SystemExit(f'D1 HTTP {e.code}: ' + e.read().decode('utf-8', 'replace')[:300])
+              if not data.get('success'):
+                  raise SystemExit('D1 error: ' + json.dumps(data.get('errors'))[:300])
+              return data['result'][0]
+
+          def count(sql):
+              return query(sql)['results'][0]['n']
+
+          vis = "hidden=0 AND deleted=0 AND deleted_at IS NULL"
+          poster = "poster_r2 IS NOT NULL AND length(trim(poster_r2))>0"
+          print('visible titles:', count(f"SELECT COUNT(*) AS n FROM titles WHERE {vis}"))
+          print('gated BEFORE:', count(f"SELECT COUNT(*) AS n FROM titles WHERE {vis} AND quality_gate=1"))
+
+          res = query(f"""UPDATE titles SET quality_gate=CASE WHEN {poster} THEN 1 ELSE 0 END
+                          WHERE deleted=0 AND deleted_at IS NULL
+                          AND ((CASE WHEN {poster} THEN 1 ELSE 0 END) <> quality_gate)""")
+          print('rows changed:', res.get('meta', {}).get('changes'))
+
+          print('gated AFTER:', count(f"SELECT COUNT(*) AS n FROM titles WHERE {vis} AND quality_gate=1"))
+          print('visible still ungated (no poster):', count(f"SELECT COUNT(*) AS n FROM titles WHERE {vis} AND quality_gate=0"))
+          PYEOF
