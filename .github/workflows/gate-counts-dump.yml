@@ -1,0 +1,61 @@
+name: Gate counts (read-only)
+
+# One-off diagnosis for the owner's "make everything ready for search
+# engines" question: how many visible titles each quality-gate rule blocks,
+# and how many would pass under looser rules. Read-only; changes nothing.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dump:
+    if: vars.SCREENPEEK_SYNC_ENABLED == '1' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+    steps:
+      - name: Count gate conditions
+        run: |
+          python3 - <<'PYEOF'
+          import json, os, urllib.request, urllib.error
+
+          acct = os.environ['CLOUDFLARE_ACCOUNT_ID']; token = os.environ['CLOUDFLARE_API_TOKEN']
+          url = f"https://api.cloudflare.com/client/v4/accounts/{acct}/d1/database/{os.environ['D1_DATABASE_ID']}/query"
+
+          def query(sql):
+              body = json.dumps({'sql': sql, 'params': []}).encode()
+              r = urllib.request.Request(url, data=body, method='POST')
+              r.add_header('Authorization', 'Bearer ' + token); r.add_header('Content-Type', 'application/json')
+              try:
+                  with urllib.request.urlopen(r) as resp: data = json.loads(resp.read().decode())
+              except urllib.error.HTTPError as e:
+                  raise SystemExit(f'D1 HTTP {e.code}: ' + e.read().decode('utf-8', 'replace')[:300])
+              if not data.get('success'):
+                  raise SystemExit('D1 error: ' + json.dumps(data.get('errors'))[:300])
+              return data['result'][0]['results']
+
+          vis = "hidden=0 AND deleted=0 AND deleted_at IS NULL"
+          poster = "poster_r2 IS NOT NULL AND length(trim(poster_r2))>0"
+          ov = "length(coalesce(overview,''))>=80"
+          pop = "popularity>=10"
+          cp = "((SELECT count(*) FROM credits c WHERE c.title_id=t.id AND c.title_type=t.type AND c.role='cast')>=3 OR EXISTS(SELECT 1 FROM providers p WHERE p.title_id=t.id AND p.title_type=t.type))"
+          def count(where):
+              return query(f"SELECT COUNT(*) AS n FROM titles t WHERE {where}")[0]['n']
+
+          print('visible titles:', count(vis))
+          print('gated now (quality_gate=1):', count(vis + " AND quality_gate=1"))
+          print('pass all four rules:', count(f"{vis} AND {poster} AND {ov} AND {pop} AND {cp}"))
+          print('fail poster only:', count(f"{vis} AND NOT ({poster}) AND {ov} AND {pop} AND {cp}"))
+          print('fail overview only:', count(f"{vis} AND {poster} AND NOT ({ov}) AND {pop} AND {cp}"))
+          print('fail popularity only:', count(f"{vis} AND {poster} AND {ov} AND NOT ({pop}) AND {cp}"))
+          print('fail cast/provider only:', count(f"{vis} AND {poster} AND {ov} AND {pop} AND NOT ({cp})"))
+          print('WOULD PASS if popularity rule dropped:', count(f"{vis} AND {poster} AND {ov} AND {cp}"))
+          print('WOULD PASS if popularity+cast/provider dropped:', count(f"{vis} AND {poster} AND {ov}"))
+          print('WOULD PASS with poster only:', count(f"{vis} AND {poster}"))
+          PYEOF
