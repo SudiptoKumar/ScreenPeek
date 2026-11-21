@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """ScreenPeek money checker.
 
-Pulls Adsterra statistics for the ScreenPeek domain into D1 (adsterra_days /
-adsterra_formats) and sends Telegram money alerts via @TrafeeUpdatebot:
+Pulls Adsterra statistics for the ScreenPeek domain into KV (money:days /
+money:formats) and sends Telegram money alerts via @TrafeeUpdatebot:
   * first earning, balance milestones ($10..$10,000 ladder incl. $50/$100)
   * expected-payout notices on Adsterra's NET-15 paydays (1st-2nd / 16th-17th)
   * one daily summary at/after 09:00 Dhaka (03:00 UTC) — replaced by the two
@@ -16,14 +16,19 @@ Design notes (verified against Adsterra's Publisher API docs + live calls):
   * Stats days are UTC. Revenue is rounded to 3 decimals by Adsterra.
   * API rate limit is about simultaneous requests: this script is strictly
     sequential.
-  * Alert state lives in D1 `config` (money_* keys) so runs are idempotent:
+  * Alert state lives in KV `money:state` (the money_* keys) so runs are idempotent:
     stats upserts always happen; an alert is recorded only after its
     Telegram send succeeds (or when no bot is configured, it is recorded
     as skipped so a later bot setup does not replay history).
 
 Required env: ADSTERRA_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN,
-D1_DATABASE_ID. Optional env: MONEY_BOT_TOKEN, MONEY_BOT_CHAT_ID.
-Config keys (D1 `config`): payout_min_usd (number, optional).
+KV_NAMESPACE_ID. Optional env: MONEY_BOT_TOKEN, MONEY_BOT_CHAT_ID.
+D1_DATABASE_ID is used only by the one-time bootstrap that copies the
+pre-KV money memory (D1 config + adsterra_days/formats) into KV on the
+first KV run; after that the database is never touched again.
+Config: payout_min_usd (number, optional) — the KV mirror
+`config:payout_min_usd` (written by the admin panel), falling back to the
+copy in money:state, then to the $100 crypto minimum.
 """
 import json
 import os
@@ -89,14 +94,119 @@ def esc(value):
     return str(value).replace("'", "''")
 
 
-def get_config(d1, key, default=None):
-    rows = d1.rows(f"SELECT value FROM config WHERE key='{esc(key)}'")
-    return rows[0]["value"] if rows else default
+class QuotaRest(Exception):
+    """The one-time D1 bootstrap hit the daily row limit; rest quietly."""
 
 
-def set_config(d1, key, value):
-    d1.run(f"INSERT INTO config(key, value) VALUES('{esc(key)}', '{esc(value)}') "
-           f"ON CONFLICT(key) DO UPDATE SET value='{esc(value)}'")
+class KV:
+    def __init__(self):
+        acct = os.environ["CLOUDFLARE_ACCOUNT_ID"]
+        ns = os.environ["KV_NAMESPACE_ID"]
+        self.base = f"https://api.cloudflare.com/client/v4/accounts/{acct}/storage/kv/namespaces/{ns}/values"
+        self.token = os.environ["CLOUDFLARE_API_TOKEN"]
+
+    def get_raw(self, key):
+        req = urllib.request.Request(f"{self.base}/{urllib.parse.quote(key, safe='')}")
+        req.add_header("Authorization", "Bearer " + self.token)
+        try:
+            with urllib.request.urlopen(req, timeout=40) as resp:
+                return resp.read().decode()
+        except urllib.error.HTTPError as err:
+            if err.code == 404:
+                return None
+            raise RuntimeError(f"KV HTTP {err.code}: " + err.read().decode('utf-8', 'replace')[:300])
+
+    def put_raw(self, key, text):
+        req = urllib.request.Request(f"{self.base}/{urllib.parse.quote(key, safe='')}",
+                                     data=text.encode(), method="PUT")
+        req.add_header("Authorization", "Bearer " + self.token)
+        req.add_header("Content-Type", "text/plain")
+        with urllib.request.urlopen(req, timeout=40) as resp:
+            resp.read()
+
+    def get_json(self, key, default=None):
+        raw = self.get_raw(key)
+        if raw is None:
+            return default
+        try:
+            return json.loads(raw)
+        except ValueError:
+            return default
+
+    def put_json(self, key, obj):
+        self.put_raw(key, json.dumps(obj, separators=(",", ":")))
+
+
+class MoneyStore:
+    """All money memory in KV: money:state (alert/widget state strings),
+    money:days (date -> stats row), money:formats ("date|placement" -> row).
+    The database is read exactly once, by the bootstrap below, the first
+    time the KV keys are missing."""
+
+    def __init__(self):
+        self.kv = KV()
+        self.state = {}
+        self.days = {}
+        self.formats = {}
+        self._state_dirty = False
+
+    def load(self):
+        state = self.kv.get_json("money:state")
+        if state is None:
+            self._bootstrap()
+            return
+        self.state = {str(k): str(v) for k, v in state.items()}
+        self.days = self.kv.get_json("money:days", {}) or {}
+        self.formats = self.kv.get_json("money:formats", {}) or {}
+
+    def _bootstrap(self):
+        try:
+            d1 = D1()
+            rows = d1.rows("SELECT key, value FROM config WHERE key LIKE 'money_%' OR key='payout_min_usd'")
+            self.state = {r["key"]: str(r["value"]) for r in rows}
+            self.days = {r["date"]: {"impressions": int(r["impressions"]), "clicks": int(r["clicks"]),
+                                     "ctr": float(r["ctr"]), "cpm": float(r["cpm"]),
+                                     "revenue": float(r["revenue"]), "updated_at": r.get("updated_at") or ""}
+                         for r in d1.rows("SELECT * FROM adsterra_days")}
+            self.formats = {f"{r['date']}|{r['placement_id']}": {"impressions": int(r["impressions"]),
+                                                                 "clicks": int(r["clicks"]),
+                                                                 "revenue": float(r["revenue"])}
+                            for r in d1.rows("SELECT * FROM adsterra_formats")}
+        except RuntimeError as exc:
+            if "7500" in str(exc) or "free tier daily row" in str(exc):
+                raise QuotaRest(str(exc))
+            raise
+        self.kv.put_json("money:state", self.state)
+        self.kv.put_json("money:days", self.days)
+        self.kv.put_json("money:formats", self.formats)
+        total = sum(float(r["revenue"]) for r in self.days.values())
+        print(f"money KV bootstrap: copied {len(self.days)} days, {len(self.formats)} placement rows, "
+              f"{len(self.state)} state keys from D1 (total earned {total:.3f}); the database is not used again")
+
+    def get_config(self, key, default=None):
+        return self.state.get(key, default)
+
+    def set_config(self, key, value):
+        if self.state.get(key) != str(value):
+            self.state[key] = str(value)
+            self._state_dirty = True
+
+    def flush_state(self):
+        if self._state_dirty:
+            self.kv.put_json("money:state", self.state)
+            self._state_dirty = False
+
+    def payout_min_raw(self):
+        mirror = self.kv.get_raw("config:payout_min_usd")
+        if mirror:
+            return mirror
+        return self.state.get("payout_min_usd")
+
+    def save_days(self):
+        self.kv.put_json("money:days", self.days)
+
+    def save_formats(self):
+        self.kv.put_json("money:formats", self.formats)
 
 
 def send_telegram(text):
@@ -164,14 +274,14 @@ def bot_call(method, payload):
         return None
 
 
-def widget_chat_data(d1, today, total, balance_est, payout_min):
+def widget_chat_data(store, today, total, balance_est, payout_min):
     from datetime import datetime, timezone
-    trow = (d1.rows(f"SELECT * FROM adsterra_days WHERE date='{today.isoformat()}'") or [None])[0] or {}
-    month_start = today.replace(day=1)
-    mrow = (d1.rows(f"SELECT COALESCE(SUM(revenue),0) AS r, COALESCE(SUM(impressions),0) AS i "
-                    f"FROM adsterra_days WHERE date >= '{month_start.isoformat()}'") or [{"r": 0, "i": 0}])[0]
-    rows = d1.rows("SELECT revenue FROM adsterra_days ORDER BY date DESC LIMIT 7")
-    trend = [float(r["revenue"]) for r in reversed(rows)]
+    trow = store.days.get(today.isoformat()) or {}
+    month_start = today.replace(day=1).isoformat()
+    month_rows = [r for d, r in store.days.items() if d >= month_start]
+    mrow = {"r": sum(float(r["revenue"]) for r in month_rows), "i": sum(int(r["impressions"]) for r in month_rows)}
+    recent = sorted(store.days.keys(), reverse=True)[:7]
+    trend = [float(store.days[d]["revenue"]) for d in reversed(recent)]
     while len(trend) < 7:
         trend.insert(0, 0.0)
     nxt = next((x for x in MILESTONES if x > total), MILESTONES[-1] * 2)
@@ -193,16 +303,16 @@ def widget_chat_data(d1, today, total, balance_est, payout_min):
     return json.dumps(data, separators=(",", ":"))
 
 
-def sync_widgets(d1, data_str):
+def sync_widgets(store, data_str):
     """Send the two live cards once, then keep their data fresh in place.
     Returns True when the bot is configured (widgets are the dashboard)."""
     if not (os.environ.get("MONEY_BOT_TOKEN") and os.environ.get("MONEY_BOT_CHAT_ID")):
         return False
-    last = get_config(d1, "money_widget_data")
-    stale = get_config(d1, "money_widget_version") != WIDGET_VERSION
+    last = store.get_config("money_widget_data")
+    stale = store.get_config("money_widget_version") != WIDGET_VERSION
     base = os.path.join(os.path.dirname(os.path.abspath(__file__)), "widgets")
     for key, fname in WIDGET_FILES:
-        msg_id = get_config(d1, key)
+        msg_id = store.get_config(key)
         if not msg_id or stale:
             try:
                 with open(os.path.join(base, fname), encoding="utf-8") as fh:
@@ -213,7 +323,7 @@ def sync_widgets(d1, data_str):
             out = bot_call("sendWidget", {"html": html, "chat_data": data_str,
                                           "allow_queries": True})
             if out and out.get("ok"):
-                set_config(d1, key, str(out["result"]["message_id"]))
+                store.set_config(key, str(out["result"]["message_id"]))
                 print("widget sent:", fname, out["result"]["message_id"])
             else:
                 print("widget send failed:", fname, (out or {}).get("description"))
@@ -222,11 +332,12 @@ def sync_widgets(d1, data_str):
                            {"message_id": int(msg_id), "chat_data": data_str})
             if out and not out.get("ok") and "not modified" not in str(out.get("description", "")).lower():
                 print("widget edit failed:", fname, out.get("description"))
-    if stale and all(get_config(d1, key) for key, _ in WIDGET_FILES):
-        set_config(d1, "money_widget_version", WIDGET_VERSION)
+    if stale and all(store.get_config(key) for key, _ in WIDGET_FILES):
+        store.set_config("money_widget_version", WIDGET_VERSION)
         print("widget design version now", WIDGET_VERSION)
     if data_str != last:
-        set_config(d1, "money_widget_data", data_str)
+        store.set_config("money_widget_data", data_str)
+    store.flush_state()
     return True
 
 
@@ -236,12 +347,13 @@ def money(value):
 
 def main():
     today = date.today()  # runner clock is UTC; stats days are UTC
-    d1 = D1()
+    store = MoneyStore()
+    store.load()
 
     # ---- 1) daily totals (one sequential call) ----------------------------
     # Window: from the epoch while the table is empty (first backfill), then
     # a rolling 45 days (older rows are already stored; totals read from D1).
-    stored = int((d1.rows("SELECT COUNT(*) AS c FROM adsterra_days") or [{"c": 0}])[0]["c"])
+    stored = len(store.days)
     pull_start = EPOCH if stored == 0 else max(EPOCH, today - timedelta(days=45))
     daily = adsterra("stats.json", {"domain": DOMAIN_ID,
                                     "start_date": pull_start.isoformat(),
@@ -249,14 +361,17 @@ def main():
                                     "group_by[]": "date"})
     items = daily.get("items") or []
     print(f"daily rows: {len(items)} (dbLastUpdateTime={daily.get('dbLastUpdateTime')})")
-    stmts = []
-    for row in items:
-        stmts.append(
-            "INSERT OR REPLACE INTO adsterra_days(date, impressions, clicks, ctr, cpm, revenue, updated_at) "
-            f"VALUES('{esc(row['date'])}', {int(row.get('impression', 0))}, {int(row.get('clicks', 0))}, "
-            f"{float(row.get('ctr', 0))}, {float(row.get('cpm', 0))}, {float(row.get('revenue', 0))}, datetime('now'))")
-    if stmts:
-        d1.run_many(stmts)
+    if items:
+        from datetime import datetime, timezone
+        stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        for row in items:
+            store.days[str(row["date"])] = {"impressions": int(row.get("impression", 0)),
+                                            "clicks": int(row.get("clicks", 0)),
+                                            "ctr": float(row.get("ctr", 0)),
+                                            "cpm": float(row.get("cpm", 0)),
+                                            "revenue": float(row.get("revenue", 0)),
+                                            "updated_at": stamp}
+        store.save_days()
 
     # ---- 2) per-placement split for the last 31 days ----------------------
     start31 = max(EPOCH, today - timedelta(days=30))
@@ -266,20 +381,20 @@ def main():
                                         "start_date": start31.isoformat(),
                                         "finish_date": today.isoformat(),
                                         "group_by[]": ["date", "placement"]})
-        srows = []
+        srows = {}
         for row in split.get("items") or []:
             if row.get("date") and row.get("placement_id"):
-                srows.append(
-                    "INSERT OR REPLACE INTO adsterra_formats(date, placement_id, impressions, clicks, revenue) "
-                    f"VALUES('{esc(row['date'])}', {int(row['placement_id'])}, {int(row.get('impression', 0))}, "
-                    f"{int(row.get('clicks', 0))}, {float(row.get('revenue', 0))})")
+                srows[f"{row['date']}|{int(row['placement_id'])}"] = {
+                    "impressions": int(row.get("impression", 0)), "clicks": int(row.get("clicks", 0)),
+                    "revenue": float(row.get("revenue", 0))}
         if srows:
-            d1.run_many(srows)
+            store.formats.update(srows)
+            store.save_formats()
             placed = len(srows)
     except Exception as exc:
         print("placement split (multi-group) failed, trying per-day:", exc)
     if not placed:  # fallback: one call per day for the last 7 days
-        srows = []
+        srows = {}
         for offset in range(7):
             day = today - timedelta(days=offset)
             if day < EPOCH:
@@ -291,30 +406,31 @@ def main():
             for row in res.get("items") or []:
                 pid = row.get("placement_id") or row.get("placement")
                 if pid:
-                    srows.append(
-                        "INSERT OR REPLACE INTO adsterra_formats(date, placement_id, impressions, clicks, revenue) "
-                        f"VALUES('{day.isoformat()}', {int(pid)}, {int(row.get('impression', 0))}, "
-                        f"{int(row.get('clicks', 0))}, {float(row.get('revenue', 0))})")
+                    srows[f"{day.isoformat()}|{int(pid)}"] = {
+                        "impressions": int(row.get("impression", 0)), "clicks": int(row.get("clicks", 0)),
+                        "revenue": float(row.get("revenue", 0))}
         if srows:
-            d1.run_many(srows)
+            store.formats.update(srows)
+            store.save_formats()
             placed = len(srows)
     print(f"placement rows stored: {placed}")
 
     # ---- 3) totals + alert state ------------------------------------------
-    total = float((d1.rows("SELECT COALESCE(SUM(revenue),0) AS t FROM adsterra_days") or [{"t": 0}])[0]["t"])
-    prev_total = float(get_config(d1, "money_last_total", "0") or 0)
-    fired = {int(x) for x in (get_config(d1, "money_milestones_fired", "") or "").split(",") if x.strip()}
-    paid_modeled = float(get_config(d1, "money_paid_modeled", "0") or 0)
+    total = sum(float(r["revenue"]) for r in store.days.values())
+    prev_total = float(store.get_config("money_last_total", "0") or 0)
+    fired = {int(x) for x in (store.get_config("money_milestones_fired", "") or "").split(",") if x.strip()}
+    paid_modeled = float(store.get_config("money_paid_modeled", "0") or 0)
     balance_est = total - paid_modeled
     print(f"total earned: {total} | previously seen: {prev_total} | balance estimate: {balance_est}")
 
     bot_ready = bool(os.environ.get("MONEY_BOT_TOKEN") and os.environ.get("MONEY_BOT_CHAT_ID"))
 
     def record(key, value):
-        set_config(d1, key, value)
+        store.set_config(key, value)
+        store.flush_state()
 
     # first earning
-    if prev_total <= 0 < total and get_config(d1, "money_first_earning_done") != "1":
+    if prev_total <= 0 < total and store.get_config("money_first_earning_done") != "1":
         msg = ("🎉 <b>First earning!</b>\n\n"
                "ScreenPeek just made its first money from ads.\n"
                f"💰 Total earned: <b>{money(total)}</b>\n\n"
@@ -365,12 +481,10 @@ def main():
     if candidate:
         p_start, p_end, payday = candidate
         pkey = p_start.isoformat()
-        if get_config(d1, "money_last_payout_alert") != pkey:
-            through = float((d1.rows(
-                f"SELECT COALESCE(SUM(revenue),0) AS t FROM adsterra_days WHERE date <= '{p_end.isoformat()}'")
-                or [{"t": 0}])[0]["t"])
+        if store.get_config("money_last_payout_alert") != pkey:
+            through = sum(float(r["revenue"]) for d, r in store.days.items() if d <= p_end.isoformat())
             payable = through - paid_modeled
-            minimum_raw = get_config(d1, "payout_min_usd")
+            minimum_raw = store.payout_min_raw()
             # Karn's payout method is crypto (USDT/BTC): $100 minimum.
             # Override any time via the D1 config key payout_min_usd.
             minimum = float(minimum_raw) if minimum_raw else 100.0
@@ -401,21 +515,21 @@ def main():
 
     # live widget cards: sent once, then refreshed in place every run.
     # When they are on, they REPLACE the daily summary message.
-    _min_raw = get_config(d1, "payout_min_usd")
+    _min_raw = store.payout_min_raw()
     payout_min = float(_min_raw) if _min_raw else 100.0
-    widgets_on = sync_widgets(d1, widget_chat_data(d1, today, total, balance_est, payout_min))
+    widgets_on = sync_widgets(store, widget_chat_data(store, today, total, balance_est, payout_min))
 
     # daily summary at/after 03:00 UTC (09:00 Dhaka), once per UTC day
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc)
-    if widgets_on and now.hour >= 3 and get_config(d1, "money_last_daily") != today.isoformat():
+    if widgets_on and now.hour >= 3 and store.get_config("money_last_daily") != today.isoformat():
         record("money_last_daily", today.isoformat())  # covered by the widgets now
-    if now.hour >= 3 and not widgets_on and get_config(d1, "money_last_daily") != today.isoformat():
+    if now.hour >= 3 and not widgets_on and store.get_config("money_last_daily") != today.isoformat():
         yday = today - timedelta(days=1)
-        yrow = (d1.rows(f"SELECT * FROM adsterra_days WHERE date='{yday.isoformat()}'") or [None])[0]
+        yrow = store.days.get(yday.isoformat())
         month_start = today.replace(day=1)
-        mrow = (d1.rows(f"SELECT COALESCE(SUM(revenue),0) AS r, COALESCE(SUM(impressions),0) AS i "
-                        f"FROM adsterra_days WHERE date >= '{month_start.isoformat()}'") or [{"r": 0, "i": 0}])[0]
+        month_rows = [r for d, r in store.days.items() if d >= month_start.isoformat()]
+        mrow = {"r": sum(float(r["revenue"]) for r in month_rows), "i": sum(int(r["impressions"]) for r in month_rows)}
         nxt = next((x for x in MILESTONES if x > total), None)
         lines = ["📊 <b>ScreenPeek — Daily Money Summary</b>",
                  f"<i>Yesterday · {yday.strftime('%b %d')} (UTC day)</i>",
@@ -452,8 +566,14 @@ def main():
             record("money_last_daily", today.isoformat())
 
     record("money_last_total", f"{total:.3f}")
+    store.flush_state()
     print("done")
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except QuotaRest:
+        print("money KV bootstrap: the one-time database copy hit the daily row limit; "
+              "resting until it resets at 00:00 UTC. Not a failure.")
+        sys.exit(0)

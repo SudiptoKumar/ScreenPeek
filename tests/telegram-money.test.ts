@@ -9,16 +9,12 @@ const DAILY = [
 ];
 const TOTALS = [{ impression: 9999, clicks: 321, ctr: 3.21, cpm: 1.5, revenue: 1234.5 }];
 
-const fakeDb = (values: Record<string, string>) => ({
-  prepare: () => ({
-    bind: (key: string) => ({
-      first: async () => (key in values ? { value: values[key] } : null),
-    }),
-  }),
-}) as unknown as D1Database;
+const fakeKv = (values: Record<string, string>) => ({
+  get: async (key: string) => (key === 'money:state' ? JSON.stringify(values) : null),
+}) as unknown as KVNamespace;
 
 const fakeEnv = (values: Record<string, string> = { money_paid_modeled: '234.5' }): TelegramMoneyEnvironment => ({
-  DB: fakeDb(values),
+  CONFIG: fakeKv(values),
   ADSTERRA_API_TOKEN: 'test-token',
   MONEY_BOT_TOKEN: 'bot-token',
   MONEY_BOT_CHAT_ID: '555',

@@ -63,19 +63,28 @@ export async function adminData(env: AdminEnvironment, actor: AdminIdentity, mod
       const yesterday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1)).toISOString().slice(0, 10);
       const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString().slice(0, 10);
       const trendStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 6)).toISOString().slice(0, 10);
-      const [yRow, mRow, tRow, paidRow, fRows, uRow, dRows, pMinRow] = await Promise.all([
-        db.prepare('SELECT date,impressions,clicks,cpm,revenue FROM adsterra_days WHERE date=?').bind(yesterday).first<RevenueDay>(),
-        db.prepare('SELECT COALESCE(SUM(revenue),0) AS revenue,COALESCE(SUM(impressions),0) AS impressions FROM adsterra_days WHERE date>=?').bind(monthStart).first<{ revenue: number; impressions: number }>(),
-        db.prepare('SELECT COALESCE(SUM(revenue),0) AS total FROM adsterra_days').first<{ total: number }>(),
-        db.prepare("SELECT value FROM config WHERE key='money_paid_modeled'").first<{ value: string }>(),
-        db.prepare('SELECT placement_id,SUM(revenue) AS revenue,SUM(impressions) AS impressions FROM adsterra_formats GROUP BY placement_id ORDER BY revenue DESC LIMIT 6').all<{ placement_id: number; revenue: number; impressions: number }>(),
-        db.prepare('SELECT MAX(updated_at) AS at FROM adsterra_days').first<{ at: string | null }>(),
-        db.prepare('SELECT date,impressions,clicks,cpm,revenue FROM adsterra_days WHERE date>=? ORDER BY date ASC').bind(trendStart).all<RevenueDay>(),
-        db.prepare("SELECT value FROM config WHERE key='payout_min_usd'").first<{ value: string }>(),
+      const [daysRaw, formatsRaw, stateRaw, pMinMirror] = await Promise.all([
+        env.CONFIG.get('money:days'), env.CONFIG.get('money:formats'), env.CONFIG.get('money:state'), env.CONFIG.get('config:payout_min_usd'),
       ]);
-      const allTime = tRow?.total || 0;
-      const payoutMinRaw = Number.parseFloat(pMinRow?.value || '0') || 0;
-      if (allTime > 0 || yRow || (fRows.results || []).length) revenue = { yesterday: yRow || null, monthRevenue: mRow?.revenue || 0, monthImpressions: mRow?.impressions || 0, allTime, balanceEstimate: allTime - (Number.parseFloat(paidRow?.value || '0') || 0), updatedAt: uRow?.at || null, formats: fRows.results || [], trend: dRows.results || [], payoutMin: payoutMinRaw > 0 ? payoutMinRaw : 100 };
+      const daysMap = (daysRaw ? JSON.parse(daysRaw) : {}) as Record<string, RevenueDay & { updated_at?: string }>;
+      const formatsMap = (formatsRaw ? JSON.parse(formatsRaw) : {}) as Record<string, { impressions: number; revenue: number }>;
+      const stateMap = (stateRaw ? JSON.parse(stateRaw) : {}) as Record<string, string>;
+      const dayRows = Object.entries(daysMap).map(([date, row]) => ({ ...row, date })).sort((a, b) => a.date.localeCompare(b.date));
+      const yRow = dayRows.find(row => row.date === yesterday) || null;
+      const monthRows = dayRows.filter(row => row.date >= monthStart);
+      const allTime = dayRows.reduce((sum, row) => sum + (row.revenue || 0), 0);
+      const formatTotals = new Map<number, { placement_id: number; revenue: number; impressions: number }>();
+      for (const [key, row] of Object.entries(formatsMap)) {
+        const placementId = Number.parseInt(key.split('|')[1] || '0', 10);
+        if (!placementId) continue;
+        const agg = formatTotals.get(placementId) || { placement_id: placementId, revenue: 0, impressions: 0 };
+        agg.revenue += row.revenue || 0; agg.impressions += row.impressions || 0;
+        formatTotals.set(placementId, agg);
+      }
+      const formatRows = [...formatTotals.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 6);
+      const updatedAt = dayRows.reduce<string | null>((max, row) => (row.updated_at && (!max || row.updated_at > max) ? row.updated_at : max), null);
+      const payoutMinRaw = Number.parseFloat(pMinMirror ?? stateMap['payout_min_usd'] ?? '0') || 0;
+      if (allTime > 0 || yRow || formatRows.length) revenue = { yesterday: yRow, monthRevenue: monthRows.reduce((sum, row) => sum + (row.revenue || 0), 0), monthImpressions: monthRows.reduce((sum, row) => sum + (row.impressions || 0), 0), allTime, balanceEstimate: allTime - (Number.parseFloat(stateMap['money_paid_modeled'] || '0') || 0), updatedAt, formats: formatRows, trend: dayRows.filter(row => row.date >= trendStart), payoutMin: payoutMinRaw > 0 ? payoutMinRaw : 100 };
     } catch { revenue = null; }
   }
   else if (module === 'tools') tools = await globalSearch(db, query);

@@ -5,12 +5,12 @@
  * update to /telegram/money-webhook; this module rebuilds the widget's
  * chat_data live from Adsterra's Publisher API and pushes it back with
  * editMessageWidgetData + answerWidgetQuery. The numbers mirror
- * scripts/money_check.py (same stats calls, same D1 config keys, same
+ * scripts/money_check.py (same stats calls, same KV money state, same
  * milestone ladder, same chat_data keys) so the 30-minute checker and
  * this live refresh never disagree.
  */
 export interface TelegramMoneyEnvironment {
-  DB: D1Database;
+  CONFIG: KVNamespace;
   ADSTERRA_API_TOKEN?: string;
   MONEY_BOT_TOKEN?: string;
   MONEY_BOT_CHAT_ID?: string;
@@ -77,9 +77,13 @@ async function adsterraStats(env: TelegramMoneyEnvironment, params: Record<strin
   return Array.isArray(items) ? (items as StatsItem[]) : [];
 }
 
-async function readMoneyConfig(db: D1Database, key: string): Promise<string | null> {
-  const row = await db.prepare('SELECT value FROM config WHERE key=?').bind(key).first<{ value: string }>();
-  return row?.value ?? null;
+async function moneyState(env: TelegramMoneyEnvironment): Promise<Record<string, string>> {
+  try {
+    const raw = await env.CONFIG.get('money:state');
+    const parsed: unknown = raw ? JSON.parse(raw) : null;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed as Record<string, string>;
+  } catch { /* fall through to defaults */ }
+  return {};
 }
 
 /** Same rendering as money_check.py's strftime("%b %d · %H:%M UTC"). */
@@ -118,8 +122,10 @@ export async function buildWidgetChatData(env: TelegramMoneyEnvironment, now = n
   while (trend.length < 7) trend.unshift(0);
   const earned = totals.reduce((sum, item) => sum + num(item.revenue), 0);
 
-  const paid = Number.parseFloat((await readMoneyConfig(env.DB, 'money_paid_modeled')) ?? '0') || 0;
-  const parsedMin = Number.parseFloat((await readMoneyConfig(env.DB, 'payout_min_usd')) ?? '');
+  const state = await moneyState(env);
+  const paid = Number.parseFloat(state['money_paid_modeled'] ?? '0') || 0;
+  const mirrorMin = await env.CONFIG.get('config:payout_min_usd').catch(() => null);
+  const parsedMin = Number.parseFloat(mirrorMin ?? state['payout_min_usd'] ?? '');
   const payoutMin = Number.isFinite(parsedMin) && parsedMin > 0 ? parsedMin : 100;
 
   return {
